@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>禮券退貨彙整平台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body class="min-h-screen bg-slate-50">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-10">
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="text-2xl">🎟️</span>
+      <h1 class="font-bold text-slate-800">禮券退貨彙整平台 · 即時歸組模式</h1>
+    </div>
+    <div class="flex items-center gap-4">
+      <span id="userLabel" class="text-sm text-slate-400"></span>
+      <button onclick="location.href='index.html'" class="text-sm text-slate-500 hover:text-red-500">登出</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-6 py-6">
+
+  <section id="scanPanel">
+    <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+      <div class="space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+          <label class="block text-sm font-medium text-slate-600 mb-2">刷入序號</label>
+          <input id="scanInput" type="text" autofocus
+            class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            placeholder="條碼槍掃描或手動輸入後按 Enter" />
+          <div id="feedbackBar" class="mt-2 text-sm font-medium h-5"></div>
+
+          <div class="mt-4">
+            <label class="flex justify-between text-sm font-medium text-slate-600 mb-1">
+              <span>容忍值</span>
+              <span id="toleranceValue">20</span>
+            </label>
+            <input id="toleranceSlider" type="range" min="1" max="200" value="20" class="w-full" />
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4 grid grid-cols-3 gap-3 text-center">
+          <div>
+            <div class="text-lg font-bold text-emerald-600" id="scanTotal">0</div>
+            <div class="text-xs text-slate-400">有效刷入</div>
+          </div>
+          <div>
+            <div class="text-lg font-bold text-red-500" id="scanErr">0</div>
+            <div class="text-xs text-slate-400">格式錯誤</div>
+          </div>
+          <div>
+            <div class="text-lg font-bold text-indigo-600" id="scanGroupCount">0</div>
+            <div class="text-xs text-slate-400">群組數</div>
+          </div>
+          <div>
+            <div class="text-lg font-bold text-indigo-600" id="scanSegmentCount">0</div>
+            <div class="text-xs text-slate-400">整理數</div>
+          </div>
+          <div>
+            <div class="text-lg font-bold text-slate-700" id="scanCardTotal">0</div>
+            <div class="text-xs text-slate-400">總張數</div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+          <div class="text-sm font-medium text-slate-600 mb-2">刷入紀錄</div>
+          <div id="scanLog" class="space-y-1 text-xs font-mono max-h-64 overflow-y-auto"></div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200 p-4">
+        <div class="flex justify-between items-center mb-3">
+          <div class="flex gap-1">
+            <button id="scanSubTabGroupsBtn" class="scan-sub-tab px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600">群組列表</button>
+            <button id="scanSubTabResultBtn" class="scan-sub-tab px-3 py-1.5 text-sm font-medium rounded-lg text-slate-500 hover:bg-slate-50">整理結果</button>
+          </div>
+          <div class="flex gap-2">
+            <button id="sortScanBtn" class="text-sm text-indigo-600 hover:underline">排序群組</button>
+            <button id="exportScanBtn" class="text-sm text-indigo-600 hover:underline">匯出 TSV</button>
+            <button id="exportExcelBtn" class="text-sm text-emerald-600 hover:underline">匯出 Excel</button>
+            <button id="resetScanBtn" class="text-sm text-red-500 hover:underline">重置</button>
+          </div>
+        </div>
+        <div id="scanGroupsView" class="space-y-2 max-h-[600px] overflow-y-auto"></div>
+        <div id="scanResultView" class="hidden max-h-[600px] overflow-y-auto">
+          <table class="w-full text-sm">
+            <thead class="sticky top-0 bg-white">
+              <tr class="text-left text-slate-500 border-b border-slate-200">
+                <th class="py-2 pr-2 w-10">序號</th>
+                <th class="py-2 pr-2 w-10">✓</th>
+                <th class="py-2 pr-2">前綴</th>
+                <th class="py-2 pr-2">第一張序號</th>
+                <th class="py-2 pr-2">最後一張序號</th>
+                <th class="py-2 pr-2 text-right">張數</th>
+              </tr>
+            </thead>
+            <tbody id="scanResultBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="script.js"></script>
+<script>
+document.getElementById("userLabel").textContent = sessionStorage.getItem("voucherReturnsUser") || "";
+
+/* ---------- 即時歸組模式 ---------- */
+let scanGroups = [];
+let scanGroupIdCounter = 1;
+const seenScan = new Set();
+let scanTotalCount = 0;
+let scanErrCount = 0;
+let tolerance = 20;
+
+const scanInput = document.getElementById("scanInput");
+const feedbackBar = document.getElementById("feedbackBar");
+const toleranceSlider = document.getElementById("toleranceSlider");
+const toleranceValue = document.getElementById("toleranceValue");
+const scanGroupsView = document.getElementById("scanGroupsView");
+const scanLog = document.getElementById("scanLog");
+
+toleranceSlider.addEventListener("input", () => {
+  tolerance = parseInt(toleranceSlider.value, 10);
+  toleranceValue.textContent = tolerance;
+});
+
+function setFeedback(text, colorClass) {
+  feedbackBar.textContent = text;
+  feedbackBar.className = `mt-2 text-sm font-medium h-5 ${colorClass}`;
+  scanInput.classList.remove("flash-green", "flash-orange", "flash-red");
+  void scanInput.offsetWidth;
+  if (colorClass.includes("emerald")) scanInput.classList.add("flash-green");
+  else if (colorClass.includes("orange")) scanInput.classList.add("flash-orange");
+  else if (colorClass.includes("red")) scanInput.classList.add("flash-red");
+}
+
+function logLine(text, colorClass) {
+  const line = document.createElement("div");
+  line.className = colorClass;
+  line.textContent = text;
+  scanLog.prepend(line);
+}
+
+// groupId -> 對應的卡片 DOM 節點，避免每次刷入都整批重繪（2000+ 張規模時效能關鍵）
+const scanGroupEls = new Map();
+
+function buildGroupCardHtml(g, highlightSeq, isHighlighted) {
+  const segments = rebuildSegments(g.items);
+  return `
+    <div class="flex justify-between items-center mb-2">
+      <span class="font-mono font-medium text-slate-700 text-sm">群組 #${g.id} · ${g.prefix}</span>
+      <span class="text-indigo-600 font-semibold text-sm">${g.items.length} 張</span>
+    </div>
+    <div class="space-y-1 mb-2">
+      ${segments.map(s => `<div class="text-xs font-mono text-slate-500">${s.from.seqStr} ~ ${s.to.seqStr}（${s.count} 張）</div>`).join("")}
+    </div>
+    <div class="flex flex-wrap gap-1">
+      ${g.items.map(i => `<span class="px-2 py-0.5 rounded bg-slate-100 text-xs font-mono ${isHighlighted && i.seqStr === highlightSeq ? 'chip-latest' : ''}">${i.raw}</span>`).join("")}
+    </div>`;
+}
+
+function clearEmptyState() {
+  const empty = scanGroupsView.querySelector("[data-empty-state]");
+  if (empty) empty.remove();
+}
+
+/** 完整重繪（僅用於：排序、重置、初始載入等低頻操作，不用於逐筆刷入） */
+function renderScanGroups() {
+  scanGroupsView.innerHTML = "";
+  scanGroupEls.clear();
+  if (scanGroups.length === 0) {
+    scanGroupsView.innerHTML = `<p data-empty-state class="text-sm text-slate-400 text-center py-8">尚無群組，開始刷入序號</p>`;
+    return;
+  }
+  scanGroups.forEach((g) => {
+    const div = document.createElement("div");
+    div.className = "border border-slate-200 rounded-lg p-3";
+    div.id = `scan-group-${g.id}`;
+    div.innerHTML = buildGroupCardHtml(g, null, false);
+    scanGroupsView.appendChild(div);
+    scanGroupEls.set(g.id, div);
+  });
+}
+
+/** 單筆刷入後的局部更新：只重繪被異動的那張群組卡片，新群組插入頂部 */
+function updateGroupCard(group, isNew, highlightSeq) {
+  clearEmptyState();
+
+  let el = scanGroupEls.get(group.id);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = `scan-group-${group.id}`;
+    scanGroupEls.set(group.id, el);
+  }
+  el.className = "border border-slate-200 rounded-lg p-3 group-card-highlight";
+  el.innerHTML = buildGroupCardHtml(group, highlightSeq, true);
+
+  if (isNew) {
+    scanGroupsView.prepend(el);
+  }
+
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  clearTimeout(el.__highlightTimer);
+  el.__highlightTimer = setTimeout(() => el.classList.remove("group-card-highlight"), 1000);
+}
+
+function createScanGroup(parsed) {
+  const group = { id: scanGroupIdCounter++, prefix: parsed.prefix, items: [parsed] };
+  scanGroups.push(group);
+  return group;
+}
+
+scanInput.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const raw = scanInput.value;
+  scanInput.value = "";
+  if (raw.trim() === "") return;
+
+  const parsed = parseSerial(raw);
+
+  if (!parsed || parsed.error) {
+    scanErrCount++;
+    document.getElementById("scanErr").textContent = scanErrCount;
+    setFeedback("✕ 格式錯誤", "text-red-600");
+    logLine(`✕ 格式錯誤：${raw}`, "text-red-600");
+    return;
+  }
+
+  if (seenScan.has(parsed.raw)) {
+    setFeedback("↩ 重複略過", "text-red-600");
+    logLine(`↩ 重複略過：${parsed.raw}`, "text-orange-500");
+    return;
+  }
+  seenScan.add(parsed.raw);
+
+  const match = findBestGroup(parsed, scanGroups, tolerance);
+  let group;
+  let isNew = false;
+  if (match) {
+    group = match.group;
+    group.items.push(parsed);
+    setFeedback(`→ 併入群組 #${group.id}（距離 ${match.distance}）`, "text-orange-500");
+    logLine(`→ ${parsed.raw} 併入群組 #${group.id}（距離 ${match.distance}）`, "text-orange-500");
+  } else {
+    group = createScanGroup(parsed);
+    isNew = true;
+    setFeedback("✓ 開新群組", "text-emerald-600");
+    logLine(`✓ ${parsed.raw} 開新群組 #${group.id}`, "text-emerald-600");
+  }
+
+  scanTotalCount++;
+  document.getElementById("scanTotal").textContent = scanTotalCount;
+  updateGroupCard(group, isNew, parsed.seqStr);
+  updateSummaryStats();
+});
+
+function updateSummaryStats() {
+  const segments = computeAllSegments();
+  document.getElementById("scanGroupCount").textContent = scanGroups.length;
+  document.getElementById("scanSegmentCount").textContent = segments.length;
+  document.getElementById("scanCardTotal").textContent = scanTotalCount;
+}
+
+document.getElementById("sortScanBtn").addEventListener("click", () => {
+  // 依「相近序號」排序群組顯示順序：先按前綴，再按群組起始流水號排序；群組編號 (id) 維持不變
+  scanGroups.sort((a, b) => {
+    if (a.prefix !== b.prefix) return a.prefix < b.prefix ? -1 : 1;
+    const aMin = Math.min(...a.items.map((i) => i.seq));
+    const bMin = Math.min(...b.items.map((i) => i.seq));
+    return aMin - bMin;
+  });
+  renderScanGroups();
+});
+
+document.getElementById("exportScanBtn").addEventListener("click", () => {
+  const allSegments = [];
+  scanGroups.forEach((g) => {
+    rebuildSegments(g.items).forEach((s) => allSegments.push({ prefix: g.prefix, from: s.from, to: s.to, count: s.count }));
+  });
+  const tsv = exportGroupsAsTSV(allSegments);
+  navigator.clipboard.writeText(tsv).catch(() => {});
+  const blob = new Blob([tsv], { type: "text/tab-separated-values;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "voucher-groups.tsv";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById("exportExcelBtn").addEventListener("click", () => {
+  const segments = computeAllSegments();
+  if (segments.length === 0) {
+    alert("尚無資料可匯出，請先刷入序號");
+    return;
+  }
+
+  const rows = segments.map((s, idx) => {
+    const key = segmentKey(s.prefix, s.from, s.to);
+    return {
+      "序號": idx + 1,
+      "已核對實體": syncedSegments.get(key) ? "V" : "",
+      "前綴": s.prefix,
+      "第一張序號": s.from.raw,
+      "最後一張序號": s.to.raw,
+      "張數": s.count,
+    };
+  });
+
+  const sheet = XLSX.utils.json_to_sheet(rows);
+  sheet["!cols"] = [{ wch: 6 }, { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 8 }];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, "整理結果");
+  XLSX.writeFile(workbook, "voucher-groups.xlsx");
+});
+
+document.getElementById("resetScanBtn").addEventListener("click", () => {
+  if (!confirm("確定要重置所有群組與統計嗎？")) return;
+  scanGroups = [];
+  scanGroupIdCounter = 1;
+  seenScan.clear();
+  scanTotalCount = 0;
+  scanErrCount = 0;
+  syncedSegments.clear();
+  document.getElementById("scanTotal").textContent = 0;
+  document.getElementById("scanErr").textContent = 0;
+  scanLog.innerHTML = "";
+  renderScanGroups();
+  renderResultView();
+  updateSummaryStats();
+});
+
+/* ---------- 整理結果分頁：全部刷完後，依連號整理為一組一列，供序號與實體同步核對 ---------- */
+const scanSubTabGroupsBtn = document.getElementById("scanSubTabGroupsBtn");
+const scanSubTabResultBtn = document.getElementById("scanSubTabResultBtn");
+const scanGroupsViewEl = document.getElementById("scanGroupsView");
+const scanResultView = document.getElementById("scanResultView");
+const scanResultBody = document.getElementById("scanResultBody");
+
+// 以「前綴-起始序號-結束序號」為鍵記錄核對狀態，切換分頁或重新整理時不遺失
+const syncedSegments = new Map();
+function segmentKey(prefix, from, to) {
+  return `${prefix}|${from.seqStr}|${to.seqStr}`;
+}
+
+function computeAllSegments() {
+  const segments = [];
+  scanGroups.forEach((g) => {
+    rebuildSegments(g.items).forEach((s) => {
+      segments.push({ prefix: g.prefix, from: s.from, to: s.to, count: s.count });
+    });
+  });
+  segments.sort((a, b) => {
+    if (a.prefix !== b.prefix) return a.prefix < b.prefix ? -1 : 1;
+    return a.from.seq - b.from.seq;
+  });
+  return segments;
+}
+
+function renderResultView() {
+  const segments = computeAllSegments();
+  if (segments.length === 0) {
+    scanResultBody.innerHTML = `<tr><td colspan="6" class="text-sm text-slate-400 text-center py-8">尚無資料，請先於「群組列表」刷入序號</td></tr>`;
+    return;
+  }
+  scanResultBody.innerHTML = segments.map((s, idx) => {
+    const key = segmentKey(s.prefix, s.from, s.to);
+    const checked = syncedSegments.get(key) ? "checked" : "";
+    return `
+      <tr class="border-b border-slate-100 hover:bg-slate-50" data-seg-key="${key}">
+        <td class="py-2 pr-2 text-slate-400">${idx + 1}</td>
+        <td class="py-2 pr-2"><input type="checkbox" class="sync-checkbox w-4 h-4" ${checked} /></td>
+        <td class="py-2 pr-2 font-mono text-slate-600">${s.prefix}</td>
+        <td class="py-2 pr-2 font-mono">${s.from.raw}</td>
+        <td class="py-2 pr-2 font-mono">${s.to.raw}</td>
+        <td class="py-2 pr-2 text-right font-semibold text-indigo-600">${s.count}</td>
+      </tr>`;
+  }).join("");
+}
+
+scanResultBody.addEventListener("change", (e) => {
+  if (!e.target.classList.contains("sync-checkbox")) return;
+  const row = e.target.closest("tr");
+  const key = row.dataset.segKey;
+  if (e.target.checked) syncedSegments.set(key, true);
+  else syncedSegments.delete(key);
+  row.classList.toggle("bg-emerald-50", e.target.checked);
+});
+
+function switchScanSubTab(target) {
+  const isGroups = target === "groups";
+  scanGroupsViewEl.classList.toggle("hidden", !isGroups);
+  scanResultView.classList.toggle("hidden", isGroups);
+  scanSubTabGroupsBtn.classList.toggle("bg-indigo-50", isGroups);
+  scanSubTabGroupsBtn.classList.toggle("text-indigo-600", isGroups);
+  scanSubTabGroupsBtn.classList.toggle("text-slate-500", !isGroups);
+  scanSubTabResultBtn.classList.toggle("bg-indigo-50", !isGroups);
+  scanSubTabResultBtn.classList.toggle("text-indigo-600", !isGroups);
+  scanSubTabResultBtn.classList.toggle("text-slate-500", isGroups);
+  if (!isGroups) renderResultView();
+}
+
+scanSubTabGroupsBtn.addEventListener("click", () => switchScanSubTab("groups"));
+scanSubTabResultBtn.addEventListener("click", () => switchScanSubTab("result"));
+
+renderScanGroups();
+updateSummaryStats();
+</script>
+</body>
+</html>

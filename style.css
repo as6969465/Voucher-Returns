@@ -1,0 +1,26 @@
+.flash-green { animation: flashGreen 1s ease-out; }
+.flash-orange { animation: flashOrange 1s ease-out; }
+.flash-red { animation: flashRed 1s ease-out; }
+
+@keyframes flashGreen {
+  0% { background-color: #bbf7d0; }
+  100% { background-color: transparent; }
+}
+@keyframes flashOrange {
+  0% { background-color: #fed7aa; }
+  100% { background-color: transparent; }
+}
+@keyframes flashRed {
+  0% { background-color: #fecaca; }
+  100% { background-color: transparent; }
+}
+
+.group-card-highlight {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.chip-latest {
+  background-color: #f97316 !important;
+  color: white !important;
+}

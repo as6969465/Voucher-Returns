@@ -1,0 +1,59 @@
+{
+  "auth": {
+    "endpoint": "https://eip.fme.com.tw/FMEIP/AasApi/CheckUserId",
+    "method": "POST",
+    "request": {
+      "USER_ID": "string, max 15 chars",
+      "PSW": "string, max 30 chars"
+    },
+    "response": {
+      "MSG": "string, e.g. '000 登入成功'"
+    },
+    "codes": {
+      "000": "登入成功，導向系統首頁",
+      "100": "帳號密碼錯誤",
+      "200": "AD 認證錯誤",
+      "998": "資料庫連線異常，可重試",
+      "999": "其他錯誤，聯絡管理員"
+    }
+  },
+  "processBatch": {
+    "description": "批次模式：送出多行序號文字，回傳分組結果",
+    "request": {
+      "rawText": "string，多行序號，換行/逗號/Tab 分隔"
+    },
+    "response": {
+      "totalInput": "number",
+      "validCount": "number",
+      "groupCount": "number",
+      "duplicateCount": "number",
+      "errorCount": "number",
+      "groups": [
+        {
+          "prefix": "string",
+          "from": { "raw": "string", "seqStr": "string", "seq": "number" },
+          "to": { "raw": "string", "seqStr": "string", "seq": "number" },
+          "count": "number",
+          "items": "ParsedSerial[]"
+        }
+      ],
+      "errors": [{ "raw": "string", "error": "string" }]
+    }
+  },
+  "scanSerial": {
+    "description": "即時歸組模式：送入單筆序號與目前群組狀態，回傳歸組結果",
+    "request": {
+      "raw": "string",
+      "tolerance": "number, 1-200"
+    },
+    "response": {
+      "status": "'new_group' | 'merged' | 'error' | 'duplicate'",
+      "groupId": "number | null",
+      "distance": "number | null"
+    }
+  },
+  "exportGroups": {
+    "description": "匯出群組為 TSV 文字，欄位：前綴/起始流水號/結束流水號/張數",
+    "response": { "tsv": "string" }
+  }
+}
