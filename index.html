@@ -73,11 +73,17 @@ form.addEventListener("submit", async (e) => {
   loginBtn.textContent = "登入中...";
 
   try {
-    // Demo 模式：後端 API 尚未串接時，任意帳密皆可登入以便測試 UI
+    // Demo 模式：後端 API 尚未串接時，使用預設帳密登入以便測試 UI
     // 正式串接時請改為呼叫 AUTH_ENDPOINT（見 fme-auth-api skill）
     if (window.__DEMO_MODE__ !== false) {
-      sessionStorage.setItem("voucherReturnsUser", userId || "demo");
-      window.location.href = "app.html";
+      const DEMO_USER_ID = "reyi";
+      const DEMO_PASSWORD = "8963";
+      if (userId === DEMO_USER_ID && password === DEMO_PASSWORD) {
+        sessionStorage.setItem("voucherReturnsUser", userId);
+        window.location.href = "app.html";
+      } else {
+        showError("帳號或密碼錯誤");
+      }
       return;
     }
 
