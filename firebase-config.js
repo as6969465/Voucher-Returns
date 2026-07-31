@@ -1,7 +1,6 @@
 // Firebase 初始化（CDN ESM 版本，無需打包工具）
-// TODO: IT 工程師如需使用 Firestore / Auth 等服務，請在此檔案新增對應 SDK import，
-// 並從此檔案 export 對應的 instance（例如 export const db = getFirestore(app)）
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyC8lIcD80FpUY3iUCzSZW_vBQKTrmQKPBA",
@@ -13,3 +12,5 @@ const firebaseConfig = {
 };
 
 export const app = initializeApp(firebaseConfig);
+// 即時歸組模式的共用資料存放於 Firestore，讓多人同時刷入時彼此可即時同步看到結果
+export const db = getFirestore(app);

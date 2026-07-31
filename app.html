@@ -17,6 +17,7 @@
       <h1 class="font-bold text-slate-800">禮券退貨彙整平台 · 即時歸組模式</h1>
     </div>
     <div class="flex items-center gap-4">
+      <span id="syncStatus" class="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-400">連線中...</span>
       <span id="userLabel" class="text-sm text-slate-400"></span>
       <button onclick="location.href='index.html'" class="text-sm text-slate-500 hover:text-red-500">登出</button>
     </div>
@@ -109,16 +110,41 @@
 </main>
 
 <script src="script.js"></script>
-<script>
+<script type="module">
+import { db } from "./firebase-config.js";
+import {
+  doc,
+  onSnapshot,
+  runTransaction,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
+  serverTimestamp,
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
 document.getElementById("userLabel").textContent = sessionStorage.getItem("voucherReturnsUser") || "";
 
-/* ---------- 即時歸組模式 ---------- */
-let scanGroups = [];
-let scanGroupIdCounter = 1;
-const seenScan = new Set();
-let scanTotalCount = 0;
-let scanErrCount = 0;
-let tolerance = 20;
+/* ---------- 即時歸組模式（Firestore 共用同一份資料，多人同步刷入/檢視） ---------- */
+// 所有使用者共用同一份 session 文件：sessions/shared
+const sessionRef = doc(db, "sessions", "shared");
+
+function emptySessionData() {
+  return {
+    groups: [],
+    groupIdCounter: 1,
+    seen: [],
+    totalScanned: 0,
+    tolerance: 20,
+    syncedSegments: [],
+  };
+}
+
+let scanGroups = [];       // 本機鏡像：目前所有群組（來自 Firestore 即時同步）
+let scanTotalCount = 0;    // 本機鏡像：全體有效刷入總數
+let scanErrCount = 0;      // 本機統計：格式錯誤為單機計數，不跨裝置同步
+let tolerance = 20;        // 本機鏡像：容忍值（由任一使用者調整後同步給所有人）
+const syncedSegments = new Map(); // 本機鏡像：整理結果核對狀態
+const localGroupMeta = new Map(); // groupId -> itemCount，用來判斷這次同步哪個群組有異動
 
 const scanInput = document.getElementById("scanInput");
 const feedbackBar = document.getElementById("feedbackBar");
@@ -126,10 +152,14 @@ const toleranceSlider = document.getElementById("toleranceSlider");
 const toleranceValue = document.getElementById("toleranceValue");
 const scanGroupsView = document.getElementById("scanGroupsView");
 const scanLog = document.getElementById("scanLog");
+const syncStatus = document.getElementById("syncStatus");
 
+let applyingRemoteTolerance = false;
 toleranceSlider.addEventListener("input", () => {
   tolerance = parseInt(toleranceSlider.value, 10);
   toleranceValue.textContent = tolerance;
+  if (applyingRemoteTolerance) return;
+  updateDoc(sessionRef, { tolerance }).catch(() => {});
 });
 
 function setFeedback(text, colorClass) {
@@ -191,7 +221,7 @@ function renderScanGroups() {
 }
 
 /** 單筆刷入後的局部更新：只重繪被異動的那張群組卡片，新群組插入頂部 */
-function updateGroupCard(group, isNew, highlightSeq) {
+function updateGroupCard(group, isNew, highlightSeq, shouldScroll) {
   clearEmptyState();
 
   let el = scanGroupEls.get(group.id);
@@ -207,27 +237,20 @@ function updateGroupCard(group, isNew, highlightSeq) {
     scanGroupsView.prepend(el);
   }
 
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (shouldScroll) {
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
   clearTimeout(el.__highlightTimer);
   el.__highlightTimer = setTimeout(() => el.classList.remove("group-card-highlight"), 1000);
 }
 
-function createScanGroup(parsed) {
-  const group = { id: scanGroupIdCounter++, prefix: parsed.prefix, items: [parsed] };
-  scanGroups.push(group);
-  return group;
-}
-
-scanInput.addEventListener("keydown", (e) => {
-  if (e.key !== "Enter") return;
-  const raw = scanInput.value;
-  scanInput.value = "";
-  if (raw.trim() === "") return;
-
+/** 送出一筆刷入：先在本機做格式檢查，通過後用 Firestore transaction 與所有使用者共同的資料比對、寫入 */
+async function submitScan(raw) {
   const parsed = parseSerial(raw);
 
   if (!parsed || parsed.error) {
+    // 格式錯誤只影響本機統計，不需要寫入共用資料
     scanErrCount++;
     document.getElementById("scanErr").textContent = scanErrCount;
     setFeedback("✕ 格式錯誤", "text-red-600");
@@ -235,32 +258,69 @@ scanInput.addEventListener("keydown", (e) => {
     return;
   }
 
-  if (seenScan.has(parsed.raw)) {
-    setFeedback("↩ 重複略過", "text-red-600");
-    logLine(`↩ 重複略過：${parsed.raw}`, "text-orange-500");
-    return;
-  }
-  seenScan.add(parsed.raw);
+  try {
+    const result = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(sessionRef);
+      const data = snap.exists() ? snap.data() : emptySessionData();
+      if (!Array.isArray(data.groups)) data.groups = [];
+      if (!Array.isArray(data.seen)) data.seen = [];
+      if (typeof data.groupIdCounter !== "number") data.groupIdCounter = 1;
+      if (typeof data.totalScanned !== "number") data.totalScanned = 0;
+      if (typeof data.tolerance !== "number") data.tolerance = 20;
 
-  const match = findBestGroup(parsed, scanGroups, tolerance);
-  let group;
-  let isNew = false;
-  if (match) {
-    group = match.group;
-    group.items.push(parsed);
-    setFeedback(`→ 併入群組 #${group.id}（距離 ${match.distance}）`, "text-orange-500");
-    logLine(`→ ${parsed.raw} 併入群組 #${group.id}（距離 ${match.distance}）`, "text-orange-500");
-  } else {
-    group = createScanGroup(parsed);
-    isNew = true;
-    setFeedback("✓ 開新群組", "text-emerald-600");
-    logLine(`✓ ${parsed.raw} 開新群組 #${group.id}`, "text-emerald-600");
-  }
+      if (data.seen.includes(parsed.raw)) {
+        return { status: "duplicate" };
+      }
 
-  scanTotalCount++;
-  document.getElementById("scanTotal").textContent = scanTotalCount;
-  updateGroupCard(group, isNew, parsed.seqStr);
-  updateSummaryStats();
+      const match = findBestGroup(parsed, data.groups, data.tolerance);
+      let groupId;
+      let isNew = false;
+      let distance = null;
+      if (match) {
+        match.group.items.push(parsed);
+        groupId = match.group.id;
+        distance = match.distance;
+      } else {
+        groupId = data.groupIdCounter;
+        data.groupIdCounter += 1;
+        data.groups.push({ id: groupId, prefix: parsed.prefix, items: [parsed] });
+        isNew = true;
+      }
+
+      data.seen.push(parsed.raw);
+      data.totalScanned += 1;
+      data.updatedAt = serverTimestamp();
+
+      tx.set(sessionRef, data);
+      return { status: isNew ? "new" : "merged", groupId, distance };
+    });
+
+    if (result.status === "duplicate") {
+      setFeedback("↩ 重複略過", "text-red-600");
+      logLine(`↩ 重複略過：${parsed.raw}`, "text-orange-500");
+      return;
+    }
+
+    if (result.status === "new") {
+      setFeedback("✓ 開新群組", "text-emerald-600");
+      logLine(`✓ ${parsed.raw} 開新群組 #${result.groupId}`, "text-emerald-600");
+    } else {
+      setFeedback(`→ 併入群組 #${result.groupId}（距離 ${result.distance}）`, "text-orange-500");
+      logLine(`→ ${parsed.raw} 併入群組 #${result.groupId}（距離 ${result.distance}）`, "text-orange-500");
+    }
+    // 畫面更新交給 onSnapshot 監聽器統一處理（自己與其他使用者都走同一條路徑）
+  } catch (err) {
+    setFeedback("✕ 送出失敗，請重試", "text-red-600");
+    logLine(`✕ 網路或伺服器錯誤：${raw}`, "text-red-600");
+  }
+}
+
+scanInput.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const raw = scanInput.value;
+  scanInput.value = "";
+  if (raw.trim() === "") return;
+  submitScan(raw);
 });
 
 function updateSummaryStats() {
@@ -272,13 +332,14 @@ function updateSummaryStats() {
 
 document.getElementById("sortScanBtn").addEventListener("click", () => {
   // 依「相近序號」排序群組顯示順序：先按前綴，再按群組起始流水號排序；群組編號 (id) 維持不變
-  scanGroups.sort((a, b) => {
+  // 排序結果寫回 Firestore，讓所有使用者看到一致的排序
+  const sorted = [...scanGroups].sort((a, b) => {
     if (a.prefix !== b.prefix) return a.prefix < b.prefix ? -1 : 1;
     const aMin = Math.min(...a.items.map((i) => i.seq));
     const bMin = Math.min(...b.items.map((i) => i.seq));
     return aMin - bMin;
   });
-  renderScanGroups();
+  updateDoc(sessionRef, { groups: sorted }).catch(() => {});
 });
 
 document.getElementById("exportScanBtn").addEventListener("click", () => {
@@ -325,19 +386,16 @@ document.getElementById("exportExcelBtn").addEventListener("click", () => {
 });
 
 document.getElementById("resetScanBtn").addEventListener("click", () => {
-  if (!confirm("確定要重置所有群組與統計嗎？")) return;
-  scanGroups = [];
-  scanGroupIdCounter = 1;
-  seenScan.clear();
-  scanTotalCount = 0;
+  if (!confirm("確定要重置所有群組與統計嗎？此動作會影響所有正在使用的人員。")) return;
   scanErrCount = 0;
-  syncedSegments.clear();
-  document.getElementById("scanTotal").textContent = 0;
   document.getElementById("scanErr").textContent = 0;
   scanLog.innerHTML = "";
-  renderScanGroups();
-  renderResultView();
-  updateSummaryStats();
+  updateDoc(sessionRef, emptySessionData()).catch(() => {
+    // 文件尚不存在時 updateDoc 會失敗，改用 transaction 直接建立空白狀態
+    runTransaction(db, async (tx) => {
+      tx.set(sessionRef, emptySessionData());
+    }).catch(() => {});
+  });
 });
 
 /* ---------- 整理結果分頁：全部刷完後，依連號整理為一組一列，供序號與實體同步核對 ---------- */
@@ -347,8 +405,6 @@ const scanGroupsViewEl = document.getElementById("scanGroupsView");
 const scanResultView = document.getElementById("scanResultView");
 const scanResultBody = document.getElementById("scanResultBody");
 
-// 以「前綴-起始序號-結束序號」為鍵記錄核對狀態，切換分頁或重新整理時不遺失
-const syncedSegments = new Map();
 function segmentKey(prefix, from, to) {
   return `${prefix}|${from.seqStr}|${to.seqStr}`;
 }
@@ -392,8 +448,10 @@ scanResultBody.addEventListener("change", (e) => {
   if (!e.target.classList.contains("sync-checkbox")) return;
   const row = e.target.closest("tr");
   const key = row.dataset.segKey;
-  if (e.target.checked) syncedSegments.set(key, true);
-  else syncedSegments.delete(key);
+  // 核對狀態透過 Firestore 陣列同步給所有使用者，畫面即時反映由 onSnapshot 處理
+  updateDoc(sessionRef, {
+    syncedSegments: e.target.checked ? arrayUnion(key) : arrayRemove(key),
+  }).catch(() => {});
   row.classList.toggle("bg-emerald-50", e.target.checked);
 });
 
@@ -413,8 +471,75 @@ function switchScanSubTab(target) {
 scanSubTabGroupsBtn.addEventListener("click", () => switchScanSubTab("groups"));
 scanSubTabResultBtn.addEventListener("click", () => switchScanSubTab("result"));
 
-renderScanGroups();
-updateSummaryStats();
+/* ---------- Firestore 即時同步：任何使用者的刷入/排序/核對/重置都會即時反映到這裡 ---------- */
+let firstSnapshotHandled = false;
+
+onSnapshot(
+  sessionRef,
+  (snap) => {
+    const data = snap.exists() ? snap.data() : emptySessionData();
+    const remoteGroups = Array.isArray(data.groups) ? data.groups : [];
+
+    // 容忍值：其他使用者調整過就同步過來（自己正在拖曳時不覆蓋）
+    if (typeof data.tolerance === "number" && data.tolerance !== tolerance) {
+      applyingRemoteTolerance = true;
+      tolerance = data.tolerance;
+      toleranceSlider.value = tolerance;
+      toleranceValue.textContent = tolerance;
+      applyingRemoteTolerance = false;
+    }
+
+    scanTotalCount = typeof data.totalScanned === "number" ? data.totalScanned : 0;
+    document.getElementById("scanTotal").textContent = scanTotalCount;
+
+    syncedSegments.clear();
+    (data.syncedSegments || []).forEach((key) => syncedSegments.set(key, true));
+
+    // 重置偵測：群組數從有變無，整批清空重繪
+    if (remoteGroups.length === 0) {
+      scanGroups = [];
+      localGroupMeta.clear();
+      renderScanGroups();
+    } else {
+      const remoteIds = new Set();
+      remoteGroups.forEach((g) => {
+        remoteIds.add(g.id);
+        const prevMeta = localGroupMeta.get(g.id);
+        const isNewGroup = !prevMeta;
+        const itemCountChanged = prevMeta && prevMeta.itemCount !== g.items.length;
+        if (isNewGroup || itemCountChanged) {
+          const lastItem = g.items[g.items.length - 1];
+          updateGroupCard(g, isNewGroup, lastItem ? lastItem.seqStr : null, false);
+        }
+        localGroupMeta.set(g.id, { itemCount: g.items.length });
+      });
+      // 若排序後陣列順序改變，整批重繪一次以反映新順序（排序是低頻操作，不影響 2000 張規模的逐筆效能）
+      const orderChanged = remoteGroups.map((g) => g.id).join(",") !== scanGroups.map((g) => g.id).join(",");
+      scanGroups = remoteGroups;
+      if (orderChanged && firstSnapshotHandled) {
+        renderScanGroups();
+      }
+      // 移除已消失的群組（理論上只會發生在重置，上面已處理，這裡防呆）
+      [...localGroupMeta.keys()].forEach((id) => {
+        if (!remoteIds.has(id)) localGroupMeta.delete(id);
+      });
+    }
+
+    updateSummaryStats();
+    if (!scanResultView.classList.contains("hidden")) renderResultView();
+
+    syncStatus.textContent = snap.metadata.fromCache ? "離線快取" : "已同步";
+    syncStatus.className = `text-xs px-2 py-1 rounded-full ${
+      snap.metadata.fromCache ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
+    }`;
+
+    firstSnapshotHandled = true;
+  },
+  () => {
+    syncStatus.textContent = "連線失敗";
+    syncStatus.className = "text-xs px-2 py-1 rounded-full bg-red-50 text-red-600";
+  }
+);
 </script>
 </body>
 </html>
