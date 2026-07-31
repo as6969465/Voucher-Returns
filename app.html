@@ -46,7 +46,7 @@
 
           <div class="mt-2">
             <label class="flex justify-between text-base font-medium text-slate-600 mb-1">
-              <span>群組上限張數</span>
+              <span>群組序號範圍上限（±）</span>
               <span id="maxGroupSizeValue">100</span>
             </label>
             <input id="maxGroupSizeSlider" type="range" min="1" max="500" value="100" class="w-full" />
@@ -330,8 +330,11 @@ async function submitScan(raw) {
         return { status: "duplicate" };
       }
 
-      // 已達群組上限張數的群組不再接受併入，逼迫另開新群組
-      const eligibleGroups = data.groups.filter((g) => g.items.length < data.maxGroupSize);
+      // 群組的可接受範圍以「該群組第一張刷入的序號」為中心，前後 maxGroupSize 之內才允許併入，超出範圍就逼迫另開新群組
+      const eligibleGroups = data.groups.filter((g) => {
+        const firstSeq = g.items[0].seq;
+        return Math.abs(parsed.seq - firstSeq) <= data.maxGroupSize;
+      });
       const match = findBestGroup(parsed, eligibleGroups, data.tolerance);
       let groupId;
       let isNew = false;
