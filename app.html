@@ -92,7 +92,6 @@
           </div>
           <div class="flex gap-3">
             <button id="sortScanBtn" class="text-base text-indigo-600 hover:underline">排序群組</button>
-            <button id="exportScanBtn" class="text-base text-indigo-600 hover:underline">匯出 TSV</button>
             <button id="exportExcelBtn" class="text-base text-emerald-600 hover:underline">匯出 Excel</button>
             <button id="resetScanBtn" class="text-base text-red-500 hover:underline">重置</button>
           </div>
@@ -426,22 +425,6 @@ document.getElementById("sortScanBtn").addEventListener("click", () => {
     return aMin - bMin;
   });
   updateDoc(sessionRef, { groups: sorted }).catch(() => {});
-});
-
-document.getElementById("exportScanBtn").addEventListener("click", () => {
-  const allSegments = [];
-  scanGroups.forEach((g) => {
-    rebuildSegments(g.items).forEach((s) => allSegments.push({ prefix: g.prefix, from: s.from, to: s.to, count: s.count }));
-  });
-  const tsv = exportGroupsAsTSV(allSegments);
-  navigator.clipboard.writeText(tsv).catch(() => {});
-  const blob = new Blob([tsv], { type: "text/tab-separated-values;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "voucher-groups.tsv";
-  a.click();
-  URL.revokeObjectURL(url);
 });
 
 document.getElementById("exportExcelBtn").addEventListener("click", () => {
