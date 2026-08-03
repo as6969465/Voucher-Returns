@@ -191,8 +191,13 @@ maxGroupSizeSlider.addEventListener("input", () => {
 });
 
 function setFeedback(text, colorClass) {
+  const bgClass = colorClass.includes("emerald")
+    ? "bg-emerald-50"
+    : colorClass.includes("orange")
+    ? "bg-orange-50"
+    : "bg-red-50";
   feedbackBar.textContent = text;
-  feedbackBar.className = `mt-1 text-base font-medium h-6 ${colorClass}`;
+  feedbackBar.className = `mt-1 px-3 py-1.5 rounded-lg text-lg font-bold ${bgClass} ${colorClass} ${text ? "" : "h-6"}`;
   scanInput.classList.remove("flash-green", "flash-orange", "flash-red");
   void scanInput.offsetWidth;
   if (colorClass.includes("emerald")) scanInput.classList.add("flash-green");
