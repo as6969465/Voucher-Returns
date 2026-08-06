@@ -55,6 +55,22 @@
           </div>
         </div>
 
+        <div class="bg-white rounded-xl border border-slate-200 p-3">
+          <label class="block text-base font-medium text-slate-600 mb-1">連號頭尾過刷</label>
+          <div class="flex gap-2">
+            <input id="rangeFromInput" type="text"
+              class="w-1/2 border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              placeholder="起始序號" />
+            <input id="rangeToInput" type="text"
+              class="w-1/2 border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              placeholder="結束序號" />
+          </div>
+          <button id="rangeFillBtn" class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium py-1.5 rounded-lg text-base">
+            帶入中間連號
+          </button>
+          <div id="rangeFeedback" class="mt-1 text-sm font-medium min-h-[1.25rem]"></div>
+        </div>
+
         <div class="bg-white rounded-xl border border-slate-200 p-3 grid grid-cols-3 gap-2 text-center">
           <div>
             <div class="text-2xl font-bold text-emerald-600" id="scanTotal">0</div>
@@ -181,6 +197,10 @@ const toleranceSlider = document.getElementById("toleranceSlider");
 const toleranceValue = document.getElementById("toleranceValue");
 const maxGroupSizeSlider = document.getElementById("maxGroupSizeSlider");
 const maxGroupSizeValue = document.getElementById("maxGroupSizeValue");
+const rangeFromInput = document.getElementById("rangeFromInput");
+const rangeToInput = document.getElementById("rangeToInput");
+const rangeFillBtn = document.getElementById("rangeFillBtn");
+const rangeFeedback = document.getElementById("rangeFeedback");
 const scanGroupsView = document.getElementById("scanGroupsView");
 const scanLog = document.getElementById("scanLog");
 const syncStatus = document.getElementById("syncStatus");
@@ -331,6 +351,56 @@ function updateGroupCard(group, isNew, highlightSeq, shouldScroll) {
   el.__highlightTimer = setTimeout(() => el.classList.remove("group-card-highlight"), 1000);
 }
 
+function ensureSessionDefaults(data) {
+  if (!Array.isArray(data.groups)) data.groups = [];
+  if (!Array.isArray(data.seen)) data.seen = [];
+  if (!Array.isArray(data.log)) data.log = [];
+  if (typeof data.groupIdCounter !== "number") data.groupIdCounter = 1;
+  if (typeof data.totalScanned !== "number") data.totalScanned = 0;
+  if (typeof data.tolerance !== "number") data.tolerance = 20;
+  if (typeof data.maxGroupSize !== "number") data.maxGroupSize = 100;
+  return data;
+}
+
+/** 將一筆已解析的序號套用到共用資料上（就地修改 data），回傳這筆的處理結果 */
+function applyScanToData(data, parsed) {
+  const logBase = { type: parsed.type, batchNo: parsed.batchNo, seqStr: parsed.seqStr, checksum: parsed.checksum };
+
+  if (data.seen.includes(parsed.raw)) {
+    data.log = [...data.log, { ...logBase, kind: "duplicate" }].slice(-LOG_MAX_ENTRIES);
+    return { status: "duplicate" };
+  }
+
+  // 群組的可接受範圍以「該群組第一張刷入的序號」為中心，前後 maxGroupSize 之內才允許併入，超出範圍就逼迫另開新群組
+  const eligibleGroups = data.groups.filter((g) => {
+    const firstSeq = g.items[0].seq;
+    return Math.abs(parsed.seq - firstSeq) <= data.maxGroupSize;
+  });
+  const match = findBestGroup(parsed, eligibleGroups, data.tolerance);
+  let groupId;
+  let isNew = false;
+  let distance = null;
+  if (match) {
+    match.group.items.push(parsed);
+    groupId = match.group.id;
+    distance = match.distance;
+  } else {
+    groupId = data.groupIdCounter;
+    data.groupIdCounter += 1;
+    data.groups.push({ id: groupId, prefix: parsed.prefix, items: [parsed] });
+    isNew = true;
+  }
+
+  data.seen.push(parsed.raw);
+  data.totalScanned += 1;
+  data.log = [
+    ...data.log,
+    { ...logBase, kind: isNew ? "new" : "merged", groupId, distance },
+  ].slice(-LOG_MAX_ENTRIES);
+
+  return { status: isNew ? "new" : "merged", groupId, distance };
+}
+
 /** 送出一筆刷入：先在本機做格式檢查，通過後用 Firestore transaction 與所有使用者共同的資料比對、寫入 */
 async function submitScan(raw) {
   const parsed = parseSerial(raw);
@@ -347,53 +417,11 @@ async function submitScan(raw) {
   try {
     const result = await runTransaction(db, async (tx) => {
       const snap = await tx.get(sessionRef);
-      const data = snap.exists() ? snap.data() : emptySessionData();
-      if (!Array.isArray(data.groups)) data.groups = [];
-      if (!Array.isArray(data.seen)) data.seen = [];
-      if (!Array.isArray(data.log)) data.log = [];
-      if (typeof data.groupIdCounter !== "number") data.groupIdCounter = 1;
-      if (typeof data.totalScanned !== "number") data.totalScanned = 0;
-      if (typeof data.tolerance !== "number") data.tolerance = 20;
-      if (typeof data.maxGroupSize !== "number") data.maxGroupSize = 100;
-
-      const logBase = { type: parsed.type, batchNo: parsed.batchNo, seqStr: parsed.seqStr, checksum: parsed.checksum };
-
-      if (data.seen.includes(parsed.raw)) {
-        data.log = [...data.log, { ...logBase, kind: "duplicate" }].slice(-LOG_MAX_ENTRIES);
-        tx.set(sessionRef, data);
-        return { status: "duplicate" };
-      }
-
-      // 群組的可接受範圍以「該群組第一張刷入的序號」為中心，前後 maxGroupSize 之內才允許併入，超出範圍就逼迫另開新群組
-      const eligibleGroups = data.groups.filter((g) => {
-        const firstSeq = g.items[0].seq;
-        return Math.abs(parsed.seq - firstSeq) <= data.maxGroupSize;
-      });
-      const match = findBestGroup(parsed, eligibleGroups, data.tolerance);
-      let groupId;
-      let isNew = false;
-      let distance = null;
-      if (match) {
-        match.group.items.push(parsed);
-        groupId = match.group.id;
-        distance = match.distance;
-      } else {
-        groupId = data.groupIdCounter;
-        data.groupIdCounter += 1;
-        data.groups.push({ id: groupId, prefix: parsed.prefix, items: [parsed] });
-        isNew = true;
-      }
-
-      data.seen.push(parsed.raw);
-      data.totalScanned += 1;
+      const data = ensureSessionDefaults(snap.exists() ? snap.data() : emptySessionData());
+      const outcome = applyScanToData(data, parsed);
       data.updatedAt = serverTimestamp();
-      data.log = [
-        ...data.log,
-        { ...logBase, kind: isNew ? "new" : "merged", groupId, distance },
-      ].slice(-LOG_MAX_ENTRIES);
-
       tx.set(sessionRef, data);
-      return { status: isNew ? "new" : "merged", groupId, distance };
+      return outcome;
     });
 
     if (result.status === "duplicate") {
@@ -417,6 +445,103 @@ scanInput.addEventListener("keydown", (e) => {
   if (raw.trim() === "") return;
   submitScan(raw);
 });
+
+function setRangeFeedback(text, colorClass) {
+  rangeFeedback.textContent = text;
+  rangeFeedback.className = `mt-1 text-sm font-medium min-h-[1.25rem] ${colorClass}`;
+}
+
+/** 連號頭尾過刷：只輸入起始與結束序號，中間的連號由系統補齊並一次性送出 */
+async function submitRange() {
+  const fromRaw = rangeFromInput.value.trim();
+  const toRaw = rangeToInput.value.trim();
+  if (!fromRaw || !toRaw) {
+    setRangeFeedback("✕ 請輸入起始與結束序號", "text-red-600");
+    return;
+  }
+
+  const fromParsed = parseSerial(fromRaw);
+  const toParsed = parseSerial(toRaw);
+  if (!fromParsed || fromParsed.error || !toParsed || toParsed.error) {
+    setRangeFeedback("✕ 起始或結束序號格式不符", "text-red-600");
+    return;
+  }
+  if (fromParsed.prefix !== toParsed.prefix) {
+    setRangeFeedback("✕ 起始與結束序號前綴不同，無法過刷", "text-red-600");
+    return;
+  }
+
+  let lo = fromParsed;
+  let hi = toParsed;
+  if (lo.seq > hi.seq) [lo, hi] = [hi, lo];
+  const count = hi.seq - lo.seq + 1;
+
+  if (count > 2000) {
+    setRangeFeedback("✕ 範圍過大（超過 2000 張），請確認輸入", "text-red-600");
+    return;
+  }
+  if (count > 100 && !confirm(`即將帶入 ${count} 張序號，中間未實際掃描的序號檢查碼將以「*」標示，確定繼續？`)) {
+    return;
+  }
+
+  // 中間未實際掃描的序號無法得知真正的檢查碼，以「*」標示，僅供連號比對使用
+  const items = [];
+  for (let seq = lo.seq; seq <= hi.seq; seq++) {
+    if (seq === lo.seq) {
+      items.push(lo);
+    } else if (seq === hi.seq) {
+      items.push(hi);
+    } else {
+      const seqStr = String(seq).padStart(lo.seqStr.length, "0");
+      items.push({
+        raw: `${lo.type}${lo.batchNo}${seqStr}-*`,
+        type: lo.type,
+        batchNo: lo.batchNo,
+        seq,
+        seqStr,
+        checksum: "*",
+        prefix: lo.prefix,
+      });
+    }
+  }
+
+  rangeFillBtn.disabled = true;
+  setRangeFeedback(`批次帶入中...（${count} 張）`, "text-indigo-600");
+
+  try {
+    const summary = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(sessionRef);
+      const data = ensureSessionDefaults(snap.exists() ? snap.data() : emptySessionData());
+
+      let newCount = 0;
+      let mergedCount = 0;
+      let dupCount = 0;
+      for (const parsed of items) {
+        const outcome = applyScanToData(data, parsed);
+        if (outcome.status === "duplicate") dupCount++;
+        else if (outcome.status === "new") newCount++;
+        else mergedCount++;
+      }
+
+      data.updatedAt = serverTimestamp();
+      tx.set(sessionRef, data);
+      return { newCount, mergedCount, dupCount };
+    });
+
+    setRangeFeedback(
+      `✓ 完成：新增 ${summary.newCount} 組、併入 ${summary.mergedCount} 張、重複略過 ${summary.dupCount} 張`,
+      "text-emerald-600"
+    );
+    rangeFromInput.value = "";
+    rangeToInput.value = "";
+  } catch (err) {
+    setRangeFeedback("✕ 送出失敗，請重試", "text-red-600");
+  } finally {
+    rangeFillBtn.disabled = false;
+  }
+}
+
+rangeFillBtn.addEventListener("click", submitRange);
 
 function updateSummaryStats() {
   const segments = computeAllSegments();
