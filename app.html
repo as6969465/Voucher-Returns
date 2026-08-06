@@ -17,7 +17,8 @@
     <input id="operatorCodeInput" type="text" maxlength="20" autofocus
       class="w-full border border-slate-300 rounded-lg px-3 py-2 text-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
       placeholder="例如：A01、王小明" />
-    <button id="operatorCodeConfirmBtn" class="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg">開始作業</button>
+    <div id="operatorCodeError" class="mt-1 text-sm text-red-600 min-h-[1.25rem]"></div>
+    <button id="operatorCodeConfirmBtn" class="mt-1 w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium py-2 rounded-lg">開始作業</button>
   </div>
 </div>
 
@@ -30,8 +31,7 @@
     <div class="flex items-center gap-3">
       <span id="syncStatus" class="text-sm px-2 py-1 rounded-full bg-slate-100 text-slate-400">連線中...</span>
       <span id="operatorLabel" class="text-sm px-2 py-1 rounded-full bg-indigo-50 text-indigo-600"></span>
-      <span id="userLabel" class="text-base text-slate-400"></span>
-      <button onclick="location.href='index.html'" class="text-base text-slate-500 hover:text-red-500">登出</button>
+      <button id="releaseOperatorBtn" class="text-base text-slate-500 hover:text-red-500">結束作業</button>
     </div>
   </div>
 </header>
@@ -173,35 +173,75 @@ import {
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
-document.getElementById("userLabel").textContent = sessionStorage.getItem("voucherReturnsUser") || "";
-
-/* ---------- 作業代號：每台裝置/每次作業前輸入，讓刷入紀錄可分辨是誰操作的 ---------- */
+/* ---------- 作業代號：取代帳號密碼登入，唯一識別誰在操作，且不可與目前作業中的人重複 ---------- */
 const OPERATOR_STORAGE_KEY = "voucherReturnsOperator";
 let operatorCode = sessionStorage.getItem(OPERATOR_STORAGE_KEY) || "";
 
 const operatorModal = document.getElementById("operatorModal");
 const operatorCodeInput = document.getElementById("operatorCodeInput");
 const operatorCodeConfirmBtn = document.getElementById("operatorCodeConfirmBtn");
+const operatorCodeError = document.getElementById("operatorCodeError");
 const operatorLabel = document.getElementById("operatorLabel");
+const releaseOperatorBtn = document.getElementById("releaseOperatorBtn");
 
 function setOperatorLabel() {
   operatorLabel.textContent = operatorCode ? `代號：${operatorCode}` : "";
 }
 
-function confirmOperatorCode() {
+function setOperatorError(text) {
+  operatorCodeError.textContent = text;
+}
+
+/** 在共用資料中登記代號；若已有人使用中則失敗 */
+async function claimOperatorCode(code) {
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(sessionRef);
+    const data = ensureSessionDefaults(snap.exists() ? snap.data() : emptySessionData());
+    if (!Array.isArray(data.activeOperators)) data.activeOperators = [];
+    if (data.activeOperators.includes(code)) {
+      return { ok: false };
+    }
+    data.activeOperators.push(code);
+    tx.set(sessionRef, data);
+    return { ok: true };
+  });
+}
+
+function releaseOperatorCode(code) {
+  if (!code) return;
+  updateDoc(sessionRef, { activeOperators: arrayRemove(code) }).catch(() => {});
+}
+
+async function confirmOperatorCode() {
   const value = operatorCodeInput.value.trim();
   if (!value) {
+    setOperatorError("請輸入代號");
     operatorCodeInput.focus();
     return;
   }
-  operatorCode = value;
-  sessionStorage.setItem(OPERATOR_STORAGE_KEY, operatorCode);
-  setOperatorLabel();
-  operatorModal.classList.add("hidden");
-  scanInput.focus();
+
+  operatorCodeConfirmBtn.disabled = true;
+  setOperatorError("");
+  try {
+    const result = await claimOperatorCode(value);
+    if (!result.ok) {
+      setOperatorError("此代號目前有人正在作業中，請換一個代號");
+      return;
+    }
+    operatorCode = value;
+    sessionStorage.setItem(OPERATOR_STORAGE_KEY, operatorCode);
+    setOperatorLabel();
+    operatorModal.classList.add("hidden");
+    scanInput.focus();
+  } catch (err) {
+    setOperatorError("送出失敗，請重試");
+  } finally {
+    operatorCodeConfirmBtn.disabled = false;
+  }
 }
 
 if (operatorCode) {
+  // 同一台裝置重新整理頁面：代號已登記過，不需要再次搶號
   operatorModal.classList.add("hidden");
   setOperatorLabel();
 }
@@ -209,6 +249,23 @@ if (operatorCode) {
 operatorCodeConfirmBtn.addEventListener("click", confirmOperatorCode);
 operatorCodeInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") confirmOperatorCode();
+});
+
+releaseOperatorBtn.addEventListener("click", () => {
+  if (!confirm("確定要結束作業並釋放代號嗎？")) return;
+  releaseOperatorCode(operatorCode);
+  sessionStorage.removeItem(OPERATOR_STORAGE_KEY);
+  operatorCode = "";
+  setOperatorLabel();
+  operatorCodeInput.value = "";
+  setOperatorError("");
+  operatorModal.classList.remove("hidden");
+  operatorCodeInput.focus();
+});
+
+window.addEventListener("beforeunload", () => {
+  // 盡力而為：關閉分頁時嘗試釋放代號，但無法保證一定送達（例如斷網、瀏覽器直接砍掉行程）
+  releaseOperatorCode(operatorCode);
 });
 
 /* ---------- 即時歸組模式（Firestore 共用同一份資料，多人同步刷入/檢視） ---------- */
@@ -225,6 +282,7 @@ function emptySessionData() {
     maxGroupSize: 100,
     syncedSegments: [],
     log: [],
+    activeOperators: [],
   };
 }
 
@@ -418,6 +476,7 @@ function ensureSessionDefaults(data) {
   if (typeof data.totalScanned !== "number") data.totalScanned = 0;
   if (typeof data.tolerance !== "number") data.tolerance = 20;
   if (typeof data.maxGroupSize !== "number") data.maxGroupSize = 100;
+  if (!Array.isArray(data.activeOperators)) data.activeOperators = [];
   return data;
 }
 
