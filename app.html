@@ -135,6 +135,8 @@
               <col />
               <col />
               <col class="w-20" />
+              <col class="w-24" />
+              <col class="w-24" />
             </colgroup>
             <thead class="sticky top-0 bg-white">
               <tr class="text-left text-slate-500 border-b border-slate-200">
@@ -145,6 +147,8 @@
                 <th class="py-2 px-2 whitespace-nowrap">第一張序號</th>
                 <th class="py-2 px-2 whitespace-nowrap">最後一張序號</th>
                 <th class="py-2 px-2 text-right whitespace-nowrap">張數</th>
+                <th class="py-2 px-2 whitespace-nowrap">刷入時間</th>
+                <th class="py-2 px-2 whitespace-nowrap">人員代號</th>
               </tr>
             </thead>
             <tbody id="scanResultBody"></tbody>
@@ -419,13 +423,19 @@ function ensureSessionDefaults(data) {
 
 /** 將一筆已解析的序號套用到共用資料上（就地修改 data），回傳這筆的處理結果 */
 function applyScanToData(data, parsed) {
+  const scannedBy = operatorCode || "未命名";
+  const scannedAt = Date.now();
+  // 記在 item 上，供「整理結果」查詢是誰、什麼時候刷入這一張
+  parsed.scannedBy = scannedBy;
+  parsed.scannedAt = scannedAt;
+
   const logBase = {
     type: parsed.type,
     batchNo: parsed.batchNo,
     seqStr: parsed.seqStr,
     checksum: parsed.checksum,
-    operator: operatorCode || "未命名",
-    ts: Date.now(),
+    operator: scannedBy,
+    ts: scannedAt,
   };
 
   if (data.seen.includes(parsed.raw)) {
@@ -641,11 +651,15 @@ document.getElementById("exportExcelBtn").addEventListener("click", () => {
       "第一張序號": s.from.raw,
       "最後一張序號": s.to.raw,
       "張數": s.count,
+      "刷入時間": s.lastScannedAt ? formatLogTime(s.lastScannedAt) : "",
+      "人員代號": s.lastScannedBy || "",
     };
   });
 
   const sheet = XLSX.utils.json_to_sheet(rows);
-  sheet["!cols"] = [{ wch: 6 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 8 }];
+  sheet["!cols"] = [
+    { wch: 6 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 8 }, { wch: 12 }, { wch: 12 },
+  ];
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, "整理結果");
@@ -688,7 +702,25 @@ function computeAllSegments() {
   const segments = [];
   scanGroups.forEach((g) => {
     rebuildSegments(g.items).forEach((s) => {
-      segments.push({ groupId: g.id, prefix: g.prefix, from: s.from, to: s.to, count: s.count });
+      // 找出這個連號區段實際包含哪些 item，取「最後刷入」的時間與人員代號代表這一段
+      const segItems = g.items.filter((i) => i.seq >= s.from.seq && i.seq <= s.to.seq);
+      let lastScannedAt = null;
+      let lastScannedBy = null;
+      segItems.forEach((i) => {
+        if (i.scannedAt && (lastScannedAt === null || i.scannedAt > lastScannedAt)) {
+          lastScannedAt = i.scannedAt;
+          lastScannedBy = i.scannedBy || null;
+        }
+      });
+      segments.push({
+        groupId: g.id,
+        prefix: g.prefix,
+        from: s.from,
+        to: s.to,
+        count: s.count,
+        lastScannedAt,
+        lastScannedBy,
+      });
     });
   });
   segments.sort((a, b) => {
@@ -701,12 +733,14 @@ function computeAllSegments() {
 function renderResultView() {
   const segments = computeAllSegments();
   if (segments.length === 0) {
-    scanResultBody.innerHTML = `<tr><td colspan="7" class="text-base text-slate-400 text-center py-8">尚無資料，請先於「群組列表」刷入序號</td></tr>`;
+    scanResultBody.innerHTML = `<tr><td colspan="9" class="text-base text-slate-400 text-center py-8">尚無資料，請先於「群組列表」刷入序號</td></tr>`;
     return;
   }
   scanResultBody.innerHTML = segments.map((s, idx) => {
     const key = segmentKey(s.prefix, s.from, s.to);
     const checked = syncedSegments.get(key) ? "checked" : "";
+    const scannedTime = s.lastScannedAt ? formatLogTime(s.lastScannedAt) : "-";
+    const scannedBy = s.lastScannedBy || "-";
     return `
       <tr class="border-b border-slate-100 hover:bg-slate-50 align-middle" data-seg-key="${key}">
         <td class="py-2 px-2 text-center text-slate-400">${idx + 1}</td>
@@ -716,6 +750,8 @@ function renderResultView() {
         <td class="py-2 px-2 font-mono whitespace-nowrap">${formatRawHtml(s.from)}</td>
         <td class="py-2 px-2 font-mono whitespace-nowrap">${formatRawHtml(s.to)}</td>
         <td class="py-2 px-2 text-right font-semibold text-indigo-600">${s.count}</td>
+        <td class="py-2 px-2 text-slate-500 whitespace-nowrap">${scannedTime}</td>
+        <td class="py-2 px-2 text-slate-500 whitespace-nowrap">${scannedBy}</td>
       </tr>`;
   }).join("");
 }
