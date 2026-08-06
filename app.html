@@ -10,6 +10,17 @@
 </head>
 <body class="min-h-screen bg-slate-50">
 
+<div id="operatorModal" class="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
+  <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+    <h2 class="text-lg font-bold text-slate-800 mb-1">作業前請輸入代號</h2>
+    <p class="text-sm text-slate-400 mb-3">用於在刷入紀錄中標示是哪一台裝置/哪個人操作的</p>
+    <input id="operatorCodeInput" type="text" maxlength="20" autofocus
+      class="w-full border border-slate-300 rounded-lg px-3 py-2 text-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+      placeholder="例如：A01、王小明" />
+    <button id="operatorCodeConfirmBtn" class="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg">開始作業</button>
+  </div>
+</div>
+
 <header class="bg-white border-b border-slate-200 sticky top-0 z-10">
   <div class="w-full px-4 py-2 flex items-center justify-between">
     <div class="flex items-center gap-2">
@@ -18,6 +29,7 @@
     </div>
     <div class="flex items-center gap-3">
       <span id="syncStatus" class="text-sm px-2 py-1 rounded-full bg-slate-100 text-slate-400">連線中...</span>
+      <span id="operatorLabel" class="text-sm px-2 py-1 rounded-full bg-indigo-50 text-indigo-600"></span>
       <span id="userLabel" class="text-base text-slate-400"></span>
       <button onclick="location.href='index.html'" class="text-base text-slate-500 hover:text-red-500">登出</button>
     </div>
@@ -159,6 +171,42 @@ import {
 
 document.getElementById("userLabel").textContent = sessionStorage.getItem("voucherReturnsUser") || "";
 
+/* ---------- 作業代號：每台裝置/每次作業前輸入，讓刷入紀錄可分辨是誰操作的 ---------- */
+const OPERATOR_STORAGE_KEY = "voucherReturnsOperator";
+let operatorCode = sessionStorage.getItem(OPERATOR_STORAGE_KEY) || "";
+
+const operatorModal = document.getElementById("operatorModal");
+const operatorCodeInput = document.getElementById("operatorCodeInput");
+const operatorCodeConfirmBtn = document.getElementById("operatorCodeConfirmBtn");
+const operatorLabel = document.getElementById("operatorLabel");
+
+function setOperatorLabel() {
+  operatorLabel.textContent = operatorCode ? `代號：${operatorCode}` : "";
+}
+
+function confirmOperatorCode() {
+  const value = operatorCodeInput.value.trim();
+  if (!value) {
+    operatorCodeInput.focus();
+    return;
+  }
+  operatorCode = value;
+  sessionStorage.setItem(OPERATOR_STORAGE_KEY, operatorCode);
+  setOperatorLabel();
+  operatorModal.classList.add("hidden");
+  scanInput.focus();
+}
+
+if (operatorCode) {
+  operatorModal.classList.add("hidden");
+  setOperatorLabel();
+}
+
+operatorCodeConfirmBtn.addEventListener("click", confirmOperatorCode);
+operatorCodeInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") confirmOperatorCode();
+});
+
 /* ---------- 即時歸組模式（Firestore 共用同一份資料，多人同步刷入/檢視） ---------- */
 // 所有使用者共用同一份 session 文件：sessions/shared
 const sessionRef = doc(db, "sessions", "shared");
@@ -271,13 +319,14 @@ function renderCombinedLog() {
     .reverse()
     .map((entry) => {
       const rawHtml = formatRawHtml(entry);
+      const tag = `<span class="text-slate-400">[${entry.operator || "未命名"}]</span>`;
       if (entry.kind === "new") {
-        return `<div class="text-emerald-600">✓ ${rawHtml} 開新群組 #${entry.groupId}</div>`;
+        return `<div class="text-emerald-600">${tag} ✓ ${rawHtml} 開新群組 #${entry.groupId}</div>`;
       }
       if (entry.kind === "merged") {
-        return `<div class="text-orange-500">→ ${rawHtml} 併入群組 #${entry.groupId}（距離 ${entry.distance}）</div>`;
+        return `<div class="text-orange-500">${tag} → ${rawHtml} 併入群組 #${entry.groupId}（距離 ${entry.distance}）</div>`;
       }
-      return `<div class="text-orange-500">↩ ${rawHtml} 重複略過</div>`;
+      return `<div class="text-orange-500">${tag} ↩ ${rawHtml} 重複略過</div>`;
     })
     .join("");
   scanLog.innerHTML = localHtml + sharedHtml;
@@ -364,7 +413,13 @@ function ensureSessionDefaults(data) {
 
 /** 將一筆已解析的序號套用到共用資料上（就地修改 data），回傳這筆的處理結果 */
 function applyScanToData(data, parsed) {
-  const logBase = { type: parsed.type, batchNo: parsed.batchNo, seqStr: parsed.seqStr, checksum: parsed.checksum };
+  const logBase = {
+    type: parsed.type,
+    batchNo: parsed.batchNo,
+    seqStr: parsed.seqStr,
+    checksum: parsed.checksum,
+    operator: operatorCode || "未命名",
+  };
 
   if (data.seen.includes(parsed.raw)) {
     data.log = [...data.log, { ...logBase, kind: "duplicate" }].slice(-LOG_MAX_ENTRIES);
