@@ -308,9 +308,14 @@ let localErrorLines = []; // 最新在前
 let sharedLogCache = [];  // 來自 Firestore data.log，依刷入順序（最舊在前）
 
 function logLineLocal(text, colorClass) {
-  localErrorLines.unshift({ text, colorClass });
+  localErrorLines.unshift({ text: `${formatLogTime(Date.now())} ${text}`, colorClass });
   localErrorLines = localErrorLines.slice(0, LOCAL_LOG_MAX);
   renderCombinedLog();
+}
+
+function formatLogTime(ts) {
+  if (!ts) return "--:--:--";
+  return new Date(ts).toLocaleTimeString("zh-TW", { hour12: false });
 }
 
 function renderCombinedLog() {
@@ -319,14 +324,15 @@ function renderCombinedLog() {
     .reverse()
     .map((entry) => {
       const rawHtml = formatRawHtml(entry);
+      const time = `<span class="text-slate-400">${formatLogTime(entry.ts)}</span>`;
       const tag = `<span class="text-slate-400">[${entry.operator || "未命名"}]</span>`;
       if (entry.kind === "new") {
-        return `<div class="text-emerald-600">${tag} ✓ ${rawHtml} 開新群組 #${entry.groupId}</div>`;
+        return `<div class="text-emerald-600">${time} ${tag} ✓ ${rawHtml} 開新群組 #${entry.groupId}</div>`;
       }
       if (entry.kind === "merged") {
-        return `<div class="text-orange-500">${tag} → ${rawHtml} 併入群組 #${entry.groupId}（距離 ${entry.distance}）</div>`;
+        return `<div class="text-orange-500">${time} ${tag} → ${rawHtml} 併入群組 #${entry.groupId}（距離 ${entry.distance}）</div>`;
       }
-      return `<div class="text-orange-500">${tag} ↩ ${rawHtml} 重複略過</div>`;
+      return `<div class="text-orange-500">${time} ${tag} ↩ ${rawHtml} 重複略過</div>`;
     })
     .join("");
   scanLog.innerHTML = localHtml + sharedHtml;
@@ -419,6 +425,7 @@ function applyScanToData(data, parsed) {
     seqStr: parsed.seqStr,
     checksum: parsed.checksum,
     operator: operatorCode || "未命名",
+    ts: Date.now(),
   };
 
   if (data.seen.includes(parsed.raw)) {
@@ -645,7 +652,15 @@ document.getElementById("exportExcelBtn").addEventListener("click", () => {
   XLSX.writeFile(workbook, "voucher-groups.xlsx");
 });
 
+const RESET_PASSWORD = "8963";
+
 document.getElementById("resetScanBtn").addEventListener("click", () => {
+  const input = prompt("此動作會清空所有人的刷入資料，請輸入重置密碼：");
+  if (input === null) return;
+  if (input !== RESET_PASSWORD) {
+    alert("密碼錯誤，取消重置");
+    return;
+  }
   if (!confirm("確定要重置所有群組與統計嗎？此動作會影響所有正在使用的人員。")) return;
   scanErrCount = 0;
   document.getElementById("scanErr").textContent = 0;
