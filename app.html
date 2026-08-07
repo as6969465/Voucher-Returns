@@ -588,8 +588,15 @@ scanInput.addEventListener("keydown", (e) => {
 });
 
 function setRangeFeedback(text, colorClass) {
+  const bgClass = colorClass.includes("emerald")
+    ? "bg-emerald-50"
+    : colorClass.includes("orange")
+    ? "bg-orange-50"
+    : colorClass.includes("indigo")
+    ? "bg-indigo-50"
+    : "bg-red-50";
   rangeFeedback.textContent = text;
-  rangeFeedback.className = `mt-1 text-sm font-medium min-h-[1.25rem] ${colorClass}`;
+  rangeFeedback.className = `mt-1 px-3 py-1.5 rounded-lg text-base font-bold min-h-[1.25rem] ${bgClass} ${colorClass}`;
 }
 
 /** 過刷專用的寬鬆解析：檢查碼（最後 -N）可以不輸入，不需要知道流水號後的檢查碼 */
@@ -677,22 +684,37 @@ async function submitRange() {
       let newCount = 0;
       let mergedCount = 0;
       let dupCount = 0;
+      const newGroupIds = new Set();
+      const mergedGroupIds = new Set();
       for (const parsed of items) {
         const outcome = applyScanToData(data, parsed);
-        if (outcome.status === "duplicate") dupCount++;
-        else if (outcome.status === "new") newCount++;
-        else mergedCount++;
+        if (outcome.status === "duplicate") {
+          dupCount++;
+        } else if (outcome.status === "new") {
+          newCount++;
+          newGroupIds.add(outcome.groupId);
+        } else {
+          mergedCount++;
+          mergedGroupIds.add(outcome.groupId);
+        }
       }
 
       data.updatedAt = serverTimestamp();
       tx.set(sessionRef, data);
-      return { newCount, mergedCount, dupCount };
+      return {
+        newCount,
+        mergedCount,
+        dupCount,
+        newGroupIds: [...newGroupIds],
+        mergedGroupIds: [...mergedGroupIds],
+      };
     });
 
-    setRangeFeedback(
-      `✓ 完成：新增 ${summary.newCount} 組、併入 ${summary.mergedCount} 張、重複略過 ${summary.dupCount} 張`,
-      "text-emerald-600"
-    );
+    const parts = [];
+    if (summary.newCount) parts.push(`新增群組 #${summary.newGroupIds.join("、#")}（${summary.newCount} 張）`);
+    if (summary.mergedCount) parts.push(`併入群組 #${summary.mergedGroupIds.join("、#")}（${summary.mergedCount} 張）`);
+    if (summary.dupCount) parts.push(`重複略過 ${summary.dupCount} 張`);
+    setRangeFeedback(`✓ 完成：${parts.join("；")}`, "text-emerald-600");
     rangeFromInput.value = "";
     rangeToInput.value = "";
   } catch (err) {
