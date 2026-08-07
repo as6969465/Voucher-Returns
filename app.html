@@ -415,6 +415,19 @@ const scanGroupEls = new Map();
 
 function buildGroupCardHtml(g, highlightSeq, isHighlighted) {
   const segments = rebuildSegments(g.items);
+  const newestItem = isHighlighted && highlightSeq ? g.items.find((i) => i.seqStr === highlightSeq) : null;
+
+  const allChipsHtml = g.items
+    .map((i) => `<span class="px-2 py-0.5 rounded bg-slate-100 text-sm font-mono ${isHighlighted && i.seqStr === highlightSeq ? 'chip-latest' : ''}">${formatRawHtml(i)}</span>`)
+    .join("");
+
+  const newestChipHtml = newestItem
+    ? `<div class="mb-2">
+        <div class="text-xs text-slate-400 mb-1">最新刷入</div>
+        <span class="px-2 py-0.5 rounded bg-slate-100 text-sm font-mono chip-latest">${formatRawHtml(newestItem)}</span>
+      </div>`
+    : "";
+
   return `
     <div class="flex justify-between items-center mb-2">
       <span class="font-mono font-medium text-slate-700 text-base">群組 #${g.id} · ${g.prefix}</span>
@@ -424,8 +437,14 @@ function buildGroupCardHtml(g, highlightSeq, isHighlighted) {
       <div class="w-[420px] shrink-0 space-y-1 pr-3 border-r border-slate-200">
         ${segments.map(s => `<div class="text-sm font-mono text-slate-500 whitespace-nowrap">${formatRawHtml(s.from)} ~ ${formatRawHtml(s.to)}（${s.count} 張）</div>`).join("")}
       </div>
-      <div class="flex flex-wrap content-start gap-1 flex-1">
-        ${g.items.map(i => `<span class="px-2 py-0.5 rounded bg-slate-100 text-sm font-mono ${isHighlighted && i.seqStr === highlightSeq ? 'chip-latest' : ''}">${formatRawHtml(i)}</span>`).join("")}
+      <div class="flex-1">
+        ${newestChipHtml}
+        <details>
+          <summary class="cursor-pointer text-sm text-indigo-600 select-none">展開全部 ${g.items.length} 張</summary>
+          <div class="flex flex-wrap content-start gap-1 mt-2">
+            ${allChipsHtml}
+          </div>
+        </details>
       </div>
     </div>`;
 }
