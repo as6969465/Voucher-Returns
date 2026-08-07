@@ -63,8 +63,10 @@
   <section id="scanPanel">
     <div class="grid grid-cols-1 lg:grid-cols-[480px_1fr] gap-3">
       <div class="space-y-3">
-        <div class="bg-white rounded-xl border border-slate-200 p-3">
-          <label class="block text-base font-medium text-slate-600 mb-1">刷入序號</label>
+        <div class="bg-white rounded-xl border border-slate-200 border-l-4 border-l-indigo-500 p-3">
+          <label class="flex items-center gap-1.5 text-base font-semibold text-indigo-700 mb-1">
+            <span>📷</span><span>逐筆刷入</span>
+          </label>
           <input id="scanInput" type="text" autofocus
             class="w-full border border-slate-300 rounded-lg px-3 py-2 text-lg font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
             placeholder="條碼槍掃描或手動輸入後按 Enter" />
@@ -89,8 +91,10 @@
           </div>
         </div>
 
-        <div class="bg-white rounded-xl border border-slate-200 p-3">
-          <label class="block text-base font-medium text-slate-600 mb-1">連號頭尾過刷</label>
+        <div class="bg-white rounded-xl border border-slate-200 border-l-4 border-l-amber-500 p-3">
+          <label class="flex items-center gap-1.5 text-base font-semibold text-amber-700 mb-1">
+            <span>⏩</span><span>連號頭尾過刷</span>
+          </label>
           <div class="flex gap-2">
             <input id="rangeFromInput" type="text"
               class="w-1/2 border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
@@ -99,7 +103,7 @@
               class="w-1/2 border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
               placeholder="結束序號" />
           </div>
-          <button id="rangeFillBtn" class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium py-1.5 rounded-lg text-base">
+          <button id="rangeFillBtn" class="mt-2 w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-medium py-1.5 rounded-lg text-base">
             帶入中間連號
           </button>
           <div id="rangeFeedback" class="mt-1 text-sm font-medium min-h-[1.25rem]"></div>
