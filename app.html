@@ -422,8 +422,8 @@ function buildGroupCardHtml(g, highlightSeq, isHighlighted) {
     .join("");
 
   const newestChipHtml = newestItem
-    ? `<div class="mb-2">
-        <div class="text-xs text-slate-400 mb-1">最新刷入</div>
+    ? `<div class="mb-2 flex items-center gap-2">
+        <span class="text-xs text-slate-400">最新刷入</span>
         <span class="px-2 py-0.5 rounded bg-slate-100 text-sm font-mono chip-latest">${formatRawHtml(newestItem)}</span>
       </div>`
     : "";
