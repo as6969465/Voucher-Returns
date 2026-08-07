@@ -777,10 +777,11 @@ document.getElementById("exportExcelBtn").addEventListener("click", () => {
     return;
   }
 
+  const displaySeqs = computeDisplaySeqs(segments);
   const rows = segments.map((s, idx) => {
     const key = segmentKey(s.prefix, s.from, s.to);
     return {
-      "序號": idx + 1,
+      "序號": displaySeqs[idx],
       "群組編號": `#${s.groupId}`,
       "已核對實體": syncedSegments.get(key) ? "V" : "",
       "前綴": s.prefix,
@@ -871,12 +872,27 @@ function computeAllSegments() {
   return segments;
 }
 
+/** 不同群組但序號恰好連號（前一段結束 = 這一段開始 - 1）視為同一批實體卡片，序號欄要顯示同一個編號 */
+function computeDisplaySeqs(segments) {
+  const seqs = [];
+  let displaySeq = 0;
+  let prevSegment = null;
+  segments.forEach((s) => {
+    const isContinuation = prevSegment && prevSegment.prefix === s.prefix && s.from.seq === prevSegment.to.seq + 1;
+    if (!isContinuation) displaySeq += 1;
+    seqs.push(displaySeq);
+    prevSegment = s;
+  });
+  return seqs;
+}
+
 function renderResultView() {
   const segments = computeAllSegments();
   if (segments.length === 0) {
     scanResultBody.innerHTML = `<tr><td colspan="9" class="text-base text-slate-400 text-center py-8">尚無資料，請先於「群組列表」刷入序號</td></tr>`;
     return;
   }
+  const displaySeqs = computeDisplaySeqs(segments);
   scanResultBody.innerHTML = segments.map((s, idx) => {
     const key = segmentKey(s.prefix, s.from, s.to);
     const checked = syncedSegments.get(key) ? "checked" : "";
@@ -884,7 +900,7 @@ function renderResultView() {
     const scannedBy = s.lastScannedBy || "-";
     return `
       <tr class="border-b border-slate-100 hover:bg-slate-50 align-middle" data-seg-key="${key}">
-        <td class="py-2 px-2 text-center text-emerald-600 font-bold">${idx + 1}</td>
+        <td class="py-2 px-2 text-center text-emerald-600 font-bold">${displaySeqs[idx]}</td>
         <td class="py-2 px-2 text-center font-mono text-indigo-600 font-semibold">#${s.groupId}</td>
         <td class="py-2 px-2 text-center"><input type="checkbox" class="sync-checkbox w-5 h-5" ${checked} /></td>
         <td class="py-2 px-2 font-mono text-slate-600 whitespace-nowrap">${s.prefix}</td>
