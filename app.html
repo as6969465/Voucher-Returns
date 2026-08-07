@@ -299,7 +299,8 @@ const LOG_MAX_ENTRIES = 100;
 
 /** 序號後 7 碼流水號以紅字標示，方便肉眼比對實體禮券 */
 function formatRawHtml(item) {
-  return `${item.type}${item.batchNo}<span class="text-red-600 font-bold">${item.seqStr}</span>-${item.checksum}`;
+  const suffix = item.checksum ? `-${item.checksum}` : "";
+  return `${item.type}${item.batchNo}<span class="text-red-600 font-bold">${item.seqStr}</span>${suffix}`;
 }
 
 let scanGroups = [];       // 本機鏡像：目前所有群組（來自 Firestore 即時同步）
@@ -591,7 +592,27 @@ function setRangeFeedback(text, colorClass) {
   rangeFeedback.className = `mt-1 text-sm font-medium min-h-[1.25rem] ${colorClass}`;
 }
 
-/** 連號頭尾過刷：只輸入起始與結束序號，中間的連號由系統補齊並一次性送出 */
+/** 過刷專用的寬鬆解析：檢查碼（最後 -N）可以不輸入，不需要知道流水號後的檢查碼 */
+function parseSerialLenient(raw) {
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  const normalized = trimmed.toUpperCase().normalize("NFKC").replace(/\s+/g, "");
+  const match = /^([A-Z])(\d+?)(\d{7})(?:-(\d))?$/.exec(normalized);
+  if (!match) return { raw: trimmed, error: "格式不符" };
+  const [, type, batchNo, seqStr, checksum] = match;
+  return {
+    raw: checksum ? `${type}${batchNo}${seqStr}-${checksum}` : `${type}${batchNo}${seqStr}`,
+    type,
+    batchNo,
+    seq: parseInt(seqStr, 10),
+    seqStr,
+    checksum: checksum || null,
+    prefix: type + batchNo,
+  };
+}
+
+/** 連號頭尾過刷：只輸入起始與結束序號（可不含檢查碼），中間的連號由系統補齊並一次性送出 */
 async function submitRange() {
   const fromRaw = rangeFromInput.value.trim();
   const toRaw = rangeToInput.value.trim();
@@ -600,8 +621,8 @@ async function submitRange() {
     return;
   }
 
-  const fromParsed = parseSerial(fromRaw);
-  const toParsed = parseSerial(toRaw);
+  const fromParsed = parseSerialLenient(fromRaw);
+  const toParsed = parseSerialLenient(toRaw);
   if (!fromParsed || fromParsed.error || !toParsed || toParsed.error) {
     setRangeFeedback("✕ 起始或結束序號格式不符", "text-red-600");
     return;
@@ -620,11 +641,11 @@ async function submitRange() {
     setRangeFeedback("✕ 範圍過大（超過 2000 張），請確認輸入", "text-red-600");
     return;
   }
-  if (count > 100 && !confirm(`即將帶入 ${count} 張序號，中間未實際掃描的序號檢查碼將以「*」標示，確定繼續？`)) {
+  if (count > 100 && !confirm(`即將帶入 ${count} 張序號，中間未實際掃描的序號不會有檢查碼，確定繼續？`)) {
     return;
   }
 
-  // 中間未實際掃描的序號無法得知真正的檢查碼，以「*」標示，僅供連號比對使用
+  // 中間未實際掃描的序號無法得知真正的檢查碼，不加檢查碼與連字號，僅供連號比對使用
   const items = [];
   for (let seq = lo.seq; seq <= hi.seq; seq++) {
     if (seq === lo.seq) {
@@ -634,12 +655,12 @@ async function submitRange() {
     } else {
       const seqStr = String(seq).padStart(lo.seqStr.length, "0");
       items.push({
-        raw: `${lo.type}${lo.batchNo}${seqStr}-*`,
+        raw: `${lo.type}${lo.batchNo}${seqStr}`,
         type: lo.type,
         batchNo: lo.batchNo,
         seq,
         seqStr,
-        checksum: "*",
+        checksum: null,
         prefix: lo.prefix,
       });
     }
