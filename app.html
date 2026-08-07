@@ -544,7 +544,7 @@ function applyScanToData(data, parsed) {
 
 /** 送出一筆刷入：先在本機做格式檢查，通過後用 Firestore transaction 與所有使用者共同的資料比對、寫入 */
 async function submitScan(raw) {
-  const parsed = parseSerial(raw);
+  const parsed = parseSerialLenient(raw);
 
   if (!parsed || parsed.error) {
     // 格式錯誤只影響本機統計，不需要寫入共用資料
@@ -889,7 +889,7 @@ function runSerialQuery() {
     queryResult.innerHTML = `<p class="text-slate-400">請輸入序號</p>`;
     return;
   }
-  const parsed = parseSerial(raw);
+  const parsed = parseSerialLenient(raw);
   if (!parsed || parsed.error) {
     queryResult.innerHTML = `<p class="text-red-600">✕ 格式不符：${raw}</p>`;
     return;
