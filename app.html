@@ -422,8 +422,8 @@ function buildGroupCardHtml(g, highlightSeq, isHighlighted) {
     .join("");
 
   const newestChipHtml = newestItem
-    ? `<div class="mb-2 flex items-center gap-2">
-        <span class="text-xs text-slate-400">最新刷入</span>
+    ? `<div class="flex items-center gap-2">
+        <span class="text-xs text-slate-400 whitespace-nowrap">最新刷入</span>
         <span class="px-2 py-0.5 rounded bg-slate-100 text-sm font-mono chip-latest">${formatRawHtml(newestItem)}</span>
       </div>`
     : "";
@@ -438,13 +438,15 @@ function buildGroupCardHtml(g, highlightSeq, isHighlighted) {
         ${segments.map(s => `<div class="text-sm font-mono text-slate-500 whitespace-nowrap">${formatRawHtml(s.from)} ~ ${formatRawHtml(s.to)}（${s.count} 張）</div>`).join("")}
       </div>
       <div class="flex-1">
-        ${newestChipHtml}
-        <details>
-          <summary class="cursor-pointer text-sm text-indigo-600 select-none">展開全部 ${g.items.length} 張</summary>
-          <div class="flex flex-wrap content-start gap-1 mt-2">
-            ${allChipsHtml}
-          </div>
-        </details>
+        <div class="flex items-start gap-3">
+          ${newestChipHtml}
+          <details>
+            <summary class="cursor-pointer text-sm text-indigo-600 select-none whitespace-nowrap">展開全部 ${g.items.length} 張</summary>
+            <div class="flex flex-wrap content-start gap-1 mt-2">
+              ${allChipsHtml}
+            </div>
+          </details>
+        </div>
       </div>
     </div>`;
 }
