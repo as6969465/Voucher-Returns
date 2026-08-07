@@ -116,6 +116,7 @@
           <div class="flex gap-1">
             <button id="scanSubTabGroupsBtn" class="scan-sub-tab px-3 py-1.5 text-base font-medium rounded-lg bg-indigo-50 text-indigo-600">群組列表</button>
             <button id="scanSubTabResultBtn" class="scan-sub-tab px-3 py-1.5 text-base font-medium rounded-lg text-slate-500 hover:bg-slate-50">整理結果</button>
+            <button id="scanSubTabQueryBtn" class="scan-sub-tab px-3 py-1.5 text-base font-medium rounded-lg text-slate-500 hover:bg-slate-50">過刷卡號查詢</button>
           </div>
           <div class="flex gap-3">
             <button id="sortScanBtn" class="text-base text-indigo-600 hover:underline">排序群組</button>
@@ -152,6 +153,15 @@
             </thead>
             <tbody id="scanResultBody"></tbody>
           </table>
+        </div>
+        <div id="scanQueryView" class="hidden">
+          <div class="flex gap-2 mb-3">
+            <input id="queryInput" type="text"
+              class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-lg font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              placeholder="輸入完整序號查詢屬於哪個群組" />
+            <button id="queryBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 rounded-lg text-base">查詢</button>
+          </div>
+          <div id="queryResult" class="text-base"></div>
         </div>
       </div>
     </div>
@@ -748,9 +758,14 @@ document.getElementById("resetScanBtn").addEventListener("click", () => {
 /* ---------- 整理結果分頁：全部刷完後，依連號整理為一組一列，供序號與實體同步核對 ---------- */
 const scanSubTabGroupsBtn = document.getElementById("scanSubTabGroupsBtn");
 const scanSubTabResultBtn = document.getElementById("scanSubTabResultBtn");
+const scanSubTabQueryBtn = document.getElementById("scanSubTabQueryBtn");
 const scanGroupsViewEl = document.getElementById("scanGroupsView");
 const scanResultView = document.getElementById("scanResultView");
 const scanResultBody = document.getElementById("scanResultBody");
+const scanQueryView = document.getElementById("scanQueryView");
+const queryInput = document.getElementById("queryInput");
+const queryBtn = document.getElementById("queryBtn");
+const queryResult = document.getElementById("queryResult");
 
 function segmentKey(prefix, from, to) {
   return `${prefix}|${from.seqStr}|${to.seqStr}`;
@@ -825,21 +840,62 @@ scanResultBody.addEventListener("change", (e) => {
   row.classList.toggle("bg-emerald-50", e.target.checked);
 });
 
+function setSubTabActive(btn, active) {
+  btn.classList.toggle("bg-indigo-50", active);
+  btn.classList.toggle("text-indigo-600", active);
+  btn.classList.toggle("text-slate-500", !active);
+}
+
 function switchScanSubTab(target) {
-  const isGroups = target === "groups";
-  scanGroupsViewEl.classList.toggle("hidden", !isGroups);
-  scanResultView.classList.toggle("hidden", isGroups);
-  scanSubTabGroupsBtn.classList.toggle("bg-indigo-50", isGroups);
-  scanSubTabGroupsBtn.classList.toggle("text-indigo-600", isGroups);
-  scanSubTabGroupsBtn.classList.toggle("text-slate-500", !isGroups);
-  scanSubTabResultBtn.classList.toggle("bg-indigo-50", !isGroups);
-  scanSubTabResultBtn.classList.toggle("text-indigo-600", !isGroups);
-  scanSubTabResultBtn.classList.toggle("text-slate-500", isGroups);
-  if (!isGroups) renderResultView();
+  scanGroupsViewEl.classList.toggle("hidden", target !== "groups");
+  scanResultView.classList.toggle("hidden", target !== "result");
+  scanQueryView.classList.toggle("hidden", target !== "query");
+  setSubTabActive(scanSubTabGroupsBtn, target === "groups");
+  setSubTabActive(scanSubTabResultBtn, target === "result");
+  setSubTabActive(scanSubTabQueryBtn, target === "query");
+  if (target === "result") renderResultView();
+  if (target === "query") queryInput.focus();
 }
 
 scanSubTabGroupsBtn.addEventListener("click", () => switchScanSubTab("groups"));
 scanSubTabResultBtn.addEventListener("click", () => switchScanSubTab("result"));
+scanSubTabQueryBtn.addEventListener("click", () => switchScanSubTab("query"));
+
+/** 過刷卡號查詢：輸入完整序號，查出目前歸屬哪個群組與連號區段 */
+function runSerialQuery() {
+  const raw = queryInput.value.trim();
+  if (!raw) {
+    queryResult.innerHTML = `<p class="text-slate-400">請輸入序號</p>`;
+    return;
+  }
+  const parsed = parseSerial(raw);
+  if (!parsed || parsed.error) {
+    queryResult.innerHTML = `<p class="text-red-600">✕ 格式不符：${raw}</p>`;
+    return;
+  }
+
+  for (const g of scanGroups) {
+    const item = g.items.find((i) => i.seq === parsed.seq && i.type === parsed.type && i.batchNo === parsed.batchNo);
+    if (item) {
+      const segments = rebuildSegments(g.items);
+      const seg = segments.find((s) => parsed.seq >= s.from.seq && parsed.seq <= s.to.seq);
+      queryResult.innerHTML = `
+        <div class="border border-emerald-200 bg-emerald-50 rounded-lg p-4">
+          <p class="text-emerald-700 font-semibold mb-1">✓ 找到了，屬於群組 #${g.id}（${g.prefix}）</p>
+          <p class="text-slate-600">所在連號區段：${formatRawHtml(seg.from)} ~ ${formatRawHtml(seg.to)}（${seg.count} 張）</p>
+          ${item.scannedBy ? `<p class="text-slate-400 mt-1">刷入時間：${formatLogTime(item.scannedAt)}　人員代號：${item.scannedBy}</p>` : ""}
+        </div>`;
+      return;
+    }
+  }
+
+  queryResult.innerHTML = `<p class="text-red-600">✕ 查無此序號，尚未刷入任何群組</p>`;
+}
+
+queryBtn.addEventListener("click", runSerialQuery);
+queryInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") runSerialQuery();
+});
 
 /* ---------- Firestore 即時同步：任何使用者的刷入/排序/核對/重置都會即時反映到這裡 ---------- */
 let firstSnapshotHandled = false;
