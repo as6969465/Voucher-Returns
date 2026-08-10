@@ -942,6 +942,23 @@ function renderResultView() {
   }).join("");
 }
 
+/** 刷入新序號時，若目前正在看整理結果分頁，自動捲動到該序號所在的那一列 */
+function scrollResultViewToItem(target) {
+  const rows = scanResultBody.querySelectorAll("tr[data-seg-key]");
+  for (const row of rows) {
+    const [prefix, fromStr, toStr] = row.dataset.segKey.split("|");
+    if (prefix !== target.prefix) continue;
+    const fromSeq = parseInt(fromStr, 10);
+    const toSeq = parseInt(toStr, 10);
+    if (target.seq >= fromSeq && target.seq <= toSeq) {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add("bg-emerald-50");
+      setTimeout(() => row.classList.remove("bg-emerald-50"), 1500);
+      break;
+    }
+  }
+}
+
 scanResultBody.addEventListener("change", (e) => {
   if (!e.target.classList.contains("sync-checkbox")) return;
   const row = e.target.closest("tr");
@@ -1045,6 +1062,7 @@ onSnapshot(
     renderCombinedLog();
 
     // 重置偵測：群組數從有變無，整批清空重繪
+    let latestScannedItem = null;
     if (remoteGroups.length === 0) {
       scanGroups = [];
       localGroupMeta.clear();
@@ -1059,6 +1077,7 @@ onSnapshot(
         if (isNewGroup || itemCountChanged) {
           const lastItem = g.items[g.items.length - 1];
           updateGroupCard(g, isNewGroup, lastItem ? lastItem.seqStr : null, false);
+          if (lastItem) latestScannedItem = { seq: lastItem.seq, prefix: g.prefix };
         }
         localGroupMeta.set(g.id, { itemCount: g.items.length });
       });
@@ -1075,7 +1094,10 @@ onSnapshot(
     }
 
     updateSummaryStats();
-    if (!scanResultView.classList.contains("hidden")) renderResultView();
+    if (!scanResultView.classList.contains("hidden")) {
+      renderResultView();
+      if (latestScannedItem) scrollResultViewToItem(latestScannedItem);
+    }
 
     syncStatus.textContent = snap.metadata.fromCache ? "離線快取" : "已同步";
     syncStatus.className = `text-sm px-2 py-1 rounded-full ${
