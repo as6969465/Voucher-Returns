@@ -110,7 +110,13 @@
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 p-3">
-          <div class="text-base font-medium text-slate-600 mb-1">刷入紀錄（所有人共用）</div>
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-base font-medium text-slate-600">刷入紀錄</div>
+            <label class="flex items-center gap-1.5 text-sm text-slate-500 select-none cursor-pointer">
+              <input id="logOnlyMineToggle" type="checkbox" class="w-4 h-4" />
+              只看我的
+            </label>
+          </div>
           <div id="scanLog" class="space-y-0.5 text-xs font-mono max-h-64 overflow-y-auto whitespace-nowrap"></div>
         </div>
       </div>
@@ -328,6 +334,11 @@ const rangeFeedback = document.getElementById("rangeFeedback");
 const scanGroupsView = document.getElementById("scanGroupsView");
 const scanLog = document.getElementById("scanLog");
 const syncStatus = document.getElementById("syncStatus");
+const logOnlyMineToggle = document.getElementById("logOnlyMineToggle");
+logOnlyMineToggle.addEventListener("change", () => {
+  showOnlyMineLog = logOnlyMineToggle.checked;
+  renderCombinedLog();
+});
 
 let applyingRemoteTolerance = false;
 function setToleranceLocal(value) {
@@ -394,9 +405,14 @@ function formatLogTime(ts) {
   return new Date(ts).toLocaleTimeString("zh-TW", { hour12: false });
 }
 
+let showOnlyMineLog = false;
+
 function renderCombinedLog() {
   const localHtml = localErrorLines.map((l) => `<div class="${l.colorClass}">${l.text}</div>`).join("");
-  const sharedHtml = [...sharedLogCache]
+  const visibleLog = showOnlyMineLog
+    ? sharedLogCache.filter((entry) => entry.operator === operatorCode)
+    : sharedLogCache;
+  const sharedHtml = [...visibleLog]
     .reverse()
     .map((entry) => {
       const rawHtml = formatRawHtml(entry);
