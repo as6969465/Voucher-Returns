@@ -763,6 +763,20 @@ async function submitRange() {
 
 rangeFillBtn.addEventListener("click", submitRange);
 
+// 條碼槍掃描流程：刷完起始序號自動跳到結束序號，刷完結束序號直接送出，不需要再按按鈕
+rangeFromInput.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  if (rangeFromInput.value.trim() === "") return;
+  rangeToInput.focus();
+});
+rangeToInput.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  if (rangeToInput.value.trim() === "") return;
+  submitRange();
+});
+
 function updateSummaryStats() {
   const segments = computeAllSegments();
   document.getElementById("scanGroupCount").textContent = scanGroups.length;
