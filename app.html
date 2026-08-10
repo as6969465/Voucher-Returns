@@ -632,14 +632,15 @@ function parseSerialLenient(raw) {
   const normalized = trimmed.toUpperCase().normalize("NFKC").replace(/\s+/g, "");
   const match = /^([A-Z])(\d+?)(\d{7})(?:-(\d))?$/.exec(normalized);
   if (!match) return { raw: trimmed, error: "格式不符" };
-  const [, type, batchNo, seqStr, checksum] = match;
+  const [, type, batchNo, seqStr] = match;
+  // 檢查碼（最後一碼）一律捨棄，不論輸入時有沒有帶進來，只留下券種+批號+流水號比對連號
   return {
-    raw: checksum ? `${type}${batchNo}${seqStr}-${checksum}` : `${type}${batchNo}${seqStr}`,
+    raw: `${type}${batchNo}${seqStr}`,
     type,
     batchNo,
     seq: parseInt(seqStr, 10),
     seqStr,
-    checksum: checksum || null,
+    checksum: null,
     prefix: type + batchNo,
   };
 }
