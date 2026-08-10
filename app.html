@@ -630,10 +630,21 @@ function parseSerialLenient(raw) {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
   const normalized = trimmed.toUpperCase().normalize("NFKC").replace(/\s+/g, "");
-  const match = /^([A-Z])(\d+?)(\d{7})(?:-(\d))?$/.exec(normalized);
+  // 券種(1碼字母) + 號碼(最高 15 碼數字) + 可選的第 16 碼檢查碼（有無 "-" 分隔皆可）
+  const match = /^([A-Z])(\d{1,16})(?:-(\d))?$/.exec(normalized);
   if (!match) return { raw: trimmed, error: "格式不符" };
-  const [, type, batchNo, seqStr] = match;
-  // 檢查碼（最後一碼）一律捨棄，不論輸入時有沒有帶進來，只留下券種+批號+流水號比對連號
+  const [, type, digitsRaw, dashChecksum] = match;
+  let digits = digitsRaw;
+  // 沒有用 "-" 分隔但湊到 16 碼時，最後一碼就是檢查碼，自動捨棄只留前 15 碼
+  if (dashChecksum === undefined && digits.length === 16) {
+    digits = digits.slice(0, 15);
+  }
+  if (digits.length < 7 || digits.length > 15) {
+    return { raw: trimmed, error: "格式不符" };
+  }
+  const seqStr = digits.slice(-7);
+  const batchNo = digits.slice(0, -7);
+  // 檢查碼一律捨棄，不論輸入時有沒有帶進來，只留下券種+批號+流水號（最高 15 碼）比對連號
   return {
     raw: `${type}${batchNo}${seqStr}`,
     type,
