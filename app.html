@@ -593,7 +593,7 @@ async function submitScan(raw) {
     if (result.status === "duplicate") {
       setFeedback("↩ 重複略過", "text-red-600");
     } else if (result.status === "new") {
-      setFeedback("✓ 開新群組", "text-emerald-600");
+      setFeedback(`✓ 開新群組 #${result.groupId}`, "text-emerald-600");
     } else {
       setFeedback(`→ 併入群組 #${result.groupId}（距離 ${result.distance}）`, "text-orange-500");
     }
