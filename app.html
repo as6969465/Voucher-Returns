@@ -302,9 +302,9 @@ function emptySessionData() {
 const LOG_MAX_ENTRIES = 100;
 
 /** 序號後 7 碼流水號以紅字標示，方便肉眼比對實體禮券 */
+// 一律只顯示券種+號碼（最高 15 碼），檢查碼（第 16 碼）永遠不顯示，即使舊資料裡還留著也一樣
 function formatRawHtml(item) {
-  const suffix = item.checksum ? `-${item.checksum}` : "";
-  return `${item.type}${item.batchNo}<span class="text-red-600 font-bold">${item.seqStr}</span>${suffix}`;
+  return `${item.type}${item.batchNo}<span class="text-red-600 font-bold">${item.seqStr}</span>`;
 }
 
 let scanGroups = [];       // 本機鏡像：目前所有群組（來自 Firestore 即時同步）
