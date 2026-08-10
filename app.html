@@ -630,16 +630,16 @@ function parseSerialLenient(raw) {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
   const normalized = trimmed.toUpperCase().normalize("NFKC").replace(/\s+/g, "");
-  // 券種(1碼字母) + 號碼(最高 15 碼數字) + 可選的第 16 碼檢查碼（有無 "-" 分隔皆可）
-  const match = /^([A-Z])(\d{1,16})(?:-(\d))?$/.exec(normalized);
+  // 15 碼 = 券種(1碼字母) + 號碼(14碼數字)；條碼實際會多讀到第 16 碼檢查碼（有無 "-" 分隔皆可，一律捨棄）
+  const match = /^([A-Z])(\d{1,15})(?:-(\d))?$/.exec(normalized);
   if (!match) return { raw: trimmed, error: "格式不符" };
   const [, type, digitsRaw, dashChecksum] = match;
   let digits = digitsRaw;
-  // 沒有用 "-" 分隔但湊到 16 碼時，最後一碼就是檢查碼，自動捨棄只留前 15 碼
-  if (dashChecksum === undefined && digits.length === 16) {
-    digits = digits.slice(0, 15);
+  // 沒有用 "-" 分隔但條碼讀到第 16 碼（也就是這裡數字湊到 15 碼）時，最後一碼是檢查碼，自動捨棄只留前 14 碼
+  if (dashChecksum === undefined && digits.length === 15) {
+    digits = digits.slice(0, 14);
   }
-  if (digits.length < 7 || digits.length > 15) {
+  if (digits.length < 7 || digits.length > 14) {
     return { raw: trimmed, error: "格式不符" };
   }
   const seqStr = digits.slice(-7);
