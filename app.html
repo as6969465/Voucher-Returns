@@ -447,13 +447,15 @@ function renderCombinedLog() {
       const rawHtml = formatRawHtml(entry);
       const time = `<span class="text-slate-400">${formatLogTime(entry.ts)}</span>`;
       const tag = `<span class="text-slate-400">[${entry.operator || "未命名"}]</span>`;
+      const batchSuffix = entry.batchCount > 1 ? `（過刷批次共 ${entry.batchCount} 張）` : "";
       if (entry.kind === "new") {
-        return `<div class="text-emerald-600">${time} ${tag} ✓ ${rawHtml} 開新群組 #${entry.groupId}</div>`;
+        return `<div class="text-emerald-600">${time} ${tag} ✓ ${rawHtml} 開新群組 #${entry.groupId}${batchSuffix}</div>`;
       }
       if (entry.kind === "merged") {
-        return `<div class="text-orange-500">${time} ${tag} → ${rawHtml} 併入群組 #${entry.groupId}（距離 ${entry.distance}）</div>`;
+        const distanceText = entry.distance != null ? `（距離 ${entry.distance}）` : "";
+        return `<div class="text-orange-500">${time} ${tag} → ${rawHtml} 併入群組 #${entry.groupId}${distanceText}${batchSuffix}</div>`;
       }
-      return `<div class="text-orange-500">${time} ${tag} ↩ ${rawHtml} 重複略過</div>`;
+      return `<div class="text-orange-500">${time} ${tag} ↩ ${rawHtml} 重複略過${batchSuffix}</div>`;
     })
     .join("");
   scanLog.innerHTML = localHtml + sharedHtml;
@@ -652,6 +654,136 @@ async function performScan(parsed) {
   return outcome;
 }
 
+/**
+ * 連號頭尾過刷專用：一批「已知彼此連續」的序號一次送出，而不是一筆一筆各自開一次 transaction。
+ * 因為整批都是連號，最終一定只會落在「最多一個既有群組 + 幾個新群組」，所以可以：
+ *   1. 用本機鏡像挑一次候選既有群組
+ *   2. 在同一個 transaction 內讀完 meta + 候選群組 + 這一批所有 seen 標記
+ *   3. 依範圍/張數上限把這批序號分配好（先塞滿既有群組剩餘空間，超出的部分切成新群組)
+ *   4. 一次寫完，不必每張各自來回一次 Firestore——這樣寫入次數大幅減少，也不影響刷入結果的即時同步
+ * 一次呼叫的張數上限請由呼叫端控制（BULK_CHUNK_SIZE），避免單一 transaction 觸碰太多文件。
+ */
+async function performBulkScan(items) {
+  const scannedBy = operatorCode || "未命名";
+  const scannedAt = Date.now();
+  items.forEach((it) => {
+    it.scannedBy = scannedBy;
+    it.scannedAt = scannedAt;
+  });
+
+  const firstItem = items[0];
+  const eligibleGroups = scanGroups.filter((g) => {
+    if (!g.items.length) return false;
+    const firstSeq = g.items[0].seq;
+    const withinRange = Math.abs(firstItem.seq - firstSeq) <= maxGroupSize;
+    const withinCount = g.items.length < maxGroupSize;
+    return withinRange && withinCount;
+  });
+  const candidate = findBestGroup(firstItem, eligibleGroups, tolerance);
+  const candidateGroupId = candidate ? candidate.group.id : null;
+  const groupRef = candidateGroupId != null ? doc(groupsCol, String(candidateGroupId)) : null;
+
+  const seenRefs = items.map((it) => doc(seenCol, it.raw));
+
+  const result = await runTransaction(db, async (tx) => {
+    // 所有讀取要在任何寫入之前完成
+    const seenSnaps = [];
+    for (const ref of seenRefs) seenSnaps.push(await tx.get(ref));
+    const metaSnap = await tx.get(sessionRef);
+    const meta = ensureSessionDefaults(metaSnap.exists() ? metaSnap.data() : emptySessionData());
+    const groupSnap = groupRef ? await tx.get(groupRef) : null;
+
+    const dupRawSet = new Set();
+    seenSnaps.forEach((snap, i) => {
+      if (snap.exists()) dupRawSet.add(items[i].raw);
+    });
+    const freshItems = items.filter((it) => !dupRawSet.has(it.raw));
+    const dupCount = items.length - freshItems.length;
+
+    const newGroups = []; // { groupId, count }
+    const mergedGroups = []; // { groupId, count }
+    let remaining = [...freshItems];
+
+    // 先試著塞進候選的既有群組（受範圍與剩餘張數雙重限制）
+    if (remaining.length && groupSnap && groupSnap.exists()) {
+      const group = groupSnap.data();
+      const firstSeq = group.items[0].seq;
+      const spaceByCount = meta.maxGroupSize - group.items.length;
+      let spaceByRange = 0;
+      for (const it of remaining) {
+        if (Math.abs(it.seq - firstSeq) <= meta.maxGroupSize) spaceByRange++;
+        else break;
+      }
+      const takeCount = Math.max(0, Math.min(spaceByCount, spaceByRange));
+      if (takeCount > 0) {
+        const match = findBestGroup(remaining[0], [{ id: group.id, prefix: group.prefix, items: group.items }], meta.tolerance);
+        if (match) {
+          const chunk = remaining.slice(0, takeCount);
+          remaining = remaining.slice(takeCount);
+          tx.set(groupRef, { id: group.id, prefix: group.prefix, items: [...group.items, ...chunk] });
+          mergedGroups.push({ groupId: group.id, count: chunk.length });
+        }
+      }
+    }
+
+    // 剩下的（沒有既有群組可併入，或超出剩餘空間）依範圍上限切成一個或多個新群組
+    while (remaining.length) {
+      const chunk = [remaining[0]];
+      const firstSeq = remaining[0].seq;
+      let i = 1;
+      while (i < remaining.length && chunk.length < meta.maxGroupSize && remaining[i].seq - firstSeq <= meta.maxGroupSize) {
+        chunk.push(remaining[i]);
+        i++;
+      }
+      remaining = remaining.slice(chunk.length);
+
+      const newId = meta.groupIdCounter;
+      meta.groupIdCounter += 1;
+      tx.set(doc(groupsCol, String(newId)), { id: newId, prefix: chunk[0].prefix, items: chunk });
+      newGroups.push({ groupId: newId, count: chunk.length });
+    }
+
+    meta.totalScanned += freshItems.length;
+    if (freshItems.length) {
+      const last = freshItems[freshItems.length - 1];
+      const summaryGroupId = mergedGroups.length ? mergedGroups[0].groupId : newGroups[newGroups.length - 1]?.groupId;
+      meta.log = pushLog(meta.log, {
+        ...logBaseOf(last),
+        kind: mergedGroups.length && !newGroups.length ? "merged" : "new",
+        groupId: summaryGroupId,
+        distance: null,
+        batchCount: freshItems.length,
+      });
+    }
+    if (dupCount) {
+      meta.log = pushLog(meta.log, { ...logBaseOf(items[items.length - 1]), kind: "duplicate", batchCount: dupCount });
+    }
+    meta.updatedAt = serverTimestamp();
+
+    items.forEach((it) => tx.set(doc(seenCol, it.raw), { raw: it.raw }));
+    tx.set(sessionRef, meta);
+
+    return { newGroups, mergedGroups, dupCount, freshItems };
+  });
+
+  // 樂觀更新本機鏡像：依照 transaction 回傳的分配結果，把這批序號（已排除重複的）各自放進對應的群組
+  let cursor = 0;
+  [...result.mergedGroups, ...result.newGroups].forEach(({ groupId, count }) => {
+    const chunk = result.freshItems.slice(cursor, cursor + count);
+    cursor += count;
+    let group = scanGroups.find((g) => g.id === groupId);
+    if (group) {
+      chunk.forEach((it) => {
+        if (!group.items.some((i) => i.raw === it.raw)) group.items.push(it);
+      });
+    } else if (chunk.length) {
+      scanGroups.push({ id: groupId, prefix: chunk[0].prefix, items: [...chunk] });
+    }
+  });
+
+  return result;
+}
+
 /** 送出一筆刷入：先在本機做格式檢查，通過後才呼叫 performScan 與所有使用者共同的資料比對、寫入 */
 async function submitScan(raw) {
   const parsed = parseSerialLenient(raw);
@@ -791,6 +923,9 @@ async function submitRange() {
   rangeFillBtn.disabled = true;
   setRangeFeedback(`批次帶入中...（${count} 張）`, "text-indigo-600");
 
+  // 一次交易最多處理這麼多張，避免單一 transaction 觸碰過多文件；正常範圍（幾十~幾百張）通常 1 次就完成
+  const BULK_CHUNK_SIZE = 400;
+
   let newCount = 0;
   let mergedCount = 0;
   let dupCount = 0;
@@ -798,17 +933,18 @@ async function submitRange() {
   const mergedGroupIds = new Set();
 
   try {
-    for (const parsed of items) {
-      const outcome = await performScan(parsed);
-      if (outcome.status === "duplicate") {
-        dupCount++;
-      } else if (outcome.status === "new") {
-        newCount++;
-        newGroupIds.add(outcome.groupId);
-      } else {
-        mergedCount++;
-        mergedGroupIds.add(outcome.groupId);
-      }
+    for (let i = 0; i < items.length; i += BULK_CHUNK_SIZE) {
+      const chunk = items.slice(i, i + BULK_CHUNK_SIZE);
+      const outcome = await performBulkScan(chunk);
+      dupCount += outcome.dupCount;
+      outcome.newGroups.forEach(({ groupId, count }) => {
+        newCount += count;
+        newGroupIds.add(groupId);
+      });
+      outcome.mergedGroups.forEach(({ groupId, count }) => {
+        mergedCount += count;
+        mergedGroupIds.add(groupId);
+      });
     }
 
     const parts = [];
