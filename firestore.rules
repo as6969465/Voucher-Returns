@@ -8,6 +8,10 @@ service cloud.firestore {
     match /sessions/shared {
       allow read, write: if true;
     }
+    // 群組與已刷入序號分散成各自的小文件，避免單一文件超過 Firestore 1MB 上限
+    match /sessions/shared/{subcollection}/{docId} {
+      allow read, write: if true;
+    }
 
     // 其餘路徑一律拒絕
     match /{document=**} {

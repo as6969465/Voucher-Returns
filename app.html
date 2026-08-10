@@ -194,6 +194,10 @@
 import { db } from "./firebase-config.js";
 import {
   doc,
+  collection,
+  getDocs,
+  writeBatch,
+  setDoc,
   onSnapshot,
   runTransaction,
   updateDoc,
@@ -297,33 +301,48 @@ window.addEventListener("beforeunload", () => {
   releaseOperatorCode(operatorCode);
 });
 
-/* ---------- 即時歸組模式（Firestore 共用同一份資料，多人同步刷入/檢視） ---------- */
-// 所有使用者共用同一份 session 文件：sessions/shared
+/* ---------- 即時歸組模式（Firestore 共用資料，多人同步刷入/檢視） ----------
+ * 資料結構（v2，避免單一文件超過 Firestore 1MB 上限）：
+ *   sessions/shared                    小型 meta 文件：容忍值/範圍上限/統計/紀錄/核對狀態
+ *   sessions/shared/groups/{groupId}   每個群組各自一份文件：{ id, prefix, items }
+ *   sessions/shared/seen/{raw}         每張已刷入序號各自一份極小文件，只用來判斷重複
+ */
 const sessionRef = doc(db, "sessions", "shared");
+const groupsCol = collection(db, "sessions", "shared", "groups");
+const seenCol = collection(db, "sessions", "shared", "seen");
 
 function emptySessionData() {
   return {
-    groups: [],
     groupIdCounter: 1,
-    seen: [],
     totalScanned: 0,
     tolerance: 20,
     maxGroupSize: 100,
     syncedSegments: [],
     log: [],
     activeOperators: [],
+    schemaVersion: 2,
   };
+}
+
+function ensureSessionDefaults(data) {
+  if (!Array.isArray(data.log)) data.log = [];
+  if (!Array.isArray(data.syncedSegments)) data.syncedSegments = [];
+  if (!Array.isArray(data.activeOperators)) data.activeOperators = [];
+  if (typeof data.groupIdCounter !== "number") data.groupIdCounter = 1;
+  if (typeof data.totalScanned !== "number") data.totalScanned = 0;
+  if (typeof data.tolerance !== "number") data.tolerance = 20;
+  if (typeof data.maxGroupSize !== "number") data.maxGroupSize = 100;
+  return data;
 }
 
 const LOG_MAX_ENTRIES = 100;
 
-/** 序號後 7 碼流水號以紅字標示，方便肉眼比對實體禮券 */
 // 一律只顯示券種+號碼（最高 15 碼），檢查碼（第 16 碼）永遠不顯示，即使舊資料裡還留著也一樣
 function formatRawHtml(item) {
   return `${item.type}${item.batchNo}<span class="text-red-600 font-bold">${item.seqStr}</span>`;
 }
 
-let scanGroups = [];       // 本機鏡像：目前所有群組（來自 Firestore 即時同步）
+let scanGroups = [];       // 本機鏡像：目前所有群組（來自 Firestore groups 子集合即時同步）
 let scanTotalCount = 0;    // 本機鏡像：全體有效刷入總數
 let scanErrCount = 0;      // 本機統計：格式錯誤為單機計數，不跨裝置同步
 let tolerance = 20;        // 本機鏡像：容忍值（由任一使用者調整後同步給所有人）
@@ -440,7 +459,7 @@ function renderCombinedLog() {
   scanLog.innerHTML = localHtml + sharedHtml;
 }
 
-// groupId -> 對應的卡片 DOM 節點，避免每次刷入都整批重繪（2000+ 張規模時效能關鍵）
+// groupId -> 對應的卡片 DOM 節點，避免每次刷入都整批重繪（規模大時效能關鍵）
 const scanGroupEls = new Map();
 
 function buildGroupCardHtml(g, highlightSeq, isHighlighted) {
@@ -529,74 +548,111 @@ function updateGroupCard(group, isNew, highlightSeq, shouldScroll) {
   el.__highlightTimer = setTimeout(() => el.classList.remove("group-card-highlight"), 1000);
 }
 
-function ensureSessionDefaults(data) {
-  if (!Array.isArray(data.groups)) data.groups = [];
-  if (!Array.isArray(data.seen)) data.seen = [];
-  if (!Array.isArray(data.log)) data.log = [];
-  if (typeof data.groupIdCounter !== "number") data.groupIdCounter = 1;
-  if (typeof data.totalScanned !== "number") data.totalScanned = 0;
-  if (typeof data.tolerance !== "number") data.tolerance = 20;
-  if (typeof data.maxGroupSize !== "number") data.maxGroupSize = 100;
-  if (!Array.isArray(data.activeOperators)) data.activeOperators = [];
-  return data;
-}
-
-/** 將一筆已解析的序號套用到共用資料上（就地修改 data），回傳這筆的處理結果 */
-function applyScanToData(data, parsed) {
-  const scannedBy = operatorCode || "未命名";
-  const scannedAt = Date.now();
-  // 記在 item 上，供「整理結果」查詢是誰、什麼時候刷入這一張
-  parsed.scannedBy = scannedBy;
-  parsed.scannedAt = scannedAt;
-
-  const logBase = {
+function logBaseOf(parsed) {
+  return {
     type: parsed.type,
     batchNo: parsed.batchNo,
     seqStr: parsed.seqStr,
     checksum: parsed.checksum,
-    operator: scannedBy,
-    ts: scannedAt,
+    operator: parsed.scannedBy,
+    ts: parsed.scannedAt,
   };
-
-  if (data.seen.includes(parsed.raw)) {
-    data.log = [...data.log, { ...logBase, kind: "duplicate" }].slice(-LOG_MAX_ENTRIES);
-    return { status: "duplicate" };
-  }
-
-  // 群組的可接受範圍以「該群組第一張刷入的序號」為中心，前後 maxGroupSize 之內才允許併入；
-  // 群組張數也不能超過同一個上限值，兩個條件都要滿足才會併入，否則逼迫另開新群組
-  const eligibleGroups = data.groups.filter((g) => {
-    const firstSeq = g.items[0].seq;
-    const withinRange = Math.abs(parsed.seq - firstSeq) <= data.maxGroupSize;
-    const withinCount = g.items.length < data.maxGroupSize;
-    return withinRange && withinCount;
-  });
-  const match = findBestGroup(parsed, eligibleGroups, data.tolerance);
-  let groupId;
-  let isNew = false;
-  let distance = null;
-  if (match) {
-    match.group.items.push(parsed);
-    groupId = match.group.id;
-    distance = match.distance;
-  } else {
-    groupId = data.groupIdCounter;
-    data.groupIdCounter += 1;
-    data.groups.push({ id: groupId, prefix: parsed.prefix, items: [parsed] });
-    isNew = true;
-  }
-
-  data.seen.push(parsed.raw);
-  data.totalScanned += 1;
-  data.log = [
-    ...data.log,
-    { ...logBase, kind: isNew ? "new" : "merged", groupId, distance },
-  ].slice(-LOG_MAX_ENTRIES);
-
-  return { status: isNew ? "new" : "merged", groupId, distance };
 }
 
-/** 送出一筆刷入：先在本機做格式檢查，通過後用 Firestore transaction 與所有使用者共同的資料比對、寫入 */
+function pushLog(log, entry) {
+  return [...(Array.isArray(log) ? log : []), entry].slice(-LOG_MAX_ENTRIES);
+}
+
+/** 樂觀更新本機鏡像，讓連續刷入（尤其是連號過刷）不用等伺服器回應就能決定下一筆的歸屬 */
+function applyOptimisticLocalUpdate(parsed, outcome) {
+  if (outcome.status === "duplicate") return;
+  let group = scanGroups.find((g) => g.id === outcome.groupId);
+  if (group) {
+    if (!group.items.some((i) => i.raw === parsed.raw)) group.items.push(parsed);
+  } else {
+    scanGroups.push({ id: outcome.groupId, prefix: parsed.prefix, items: [parsed] });
+  }
+}
+
+/**
+ * 送出一筆已解析的序號：
+ * 1. 用本機鏡像挑出「最可能」符合的候選群組（避免要讀取全部群組文件）
+ * 2. Transaction 內用該候選群組的最新資料重新驗證是否仍然符合範圍/張數/容忍值限制
+ * 3. 不符合就改為另開新群組——整個過程只讀寫「這一個群組文件 + seen 標記 + meta 文件」，
+ *    文件大小不會隨著歷史刷入總數成長，避免再次撞上 Firestore 單一文件 1MB 上限
+ */
+async function performScan(parsed) {
+  const scannedBy = operatorCode || "未命名";
+  const scannedAt = Date.now();
+  parsed.scannedBy = scannedBy;
+  parsed.scannedAt = scannedAt;
+
+  const eligibleGroups = scanGroups.filter((g) => {
+    if (!g.items.length) return false;
+    const firstSeq = g.items[0].seq;
+    const withinRange = Math.abs(parsed.seq - firstSeq) <= maxGroupSize;
+    const withinCount = g.items.length < maxGroupSize;
+    return withinRange && withinCount;
+  });
+  const candidate = findBestGroup(parsed, eligibleGroups, tolerance);
+  const candidateGroupId = candidate ? candidate.group.id : null;
+
+  const seenRef = doc(seenCol, parsed.raw);
+  const groupRef = candidateGroupId != null ? doc(groupsCol, String(candidateGroupId)) : null;
+
+  const outcome = await runTransaction(db, async (tx) => {
+    const seenSnap = await tx.get(seenRef);
+    const metaSnap = await tx.get(sessionRef);
+    const meta = ensureSessionDefaults(metaSnap.exists() ? metaSnap.data() : emptySessionData());
+
+    if (seenSnap.exists()) {
+      meta.log = pushLog(meta.log, { ...logBaseOf(parsed), kind: "duplicate" });
+      tx.set(sessionRef, meta);
+      return { status: "duplicate" };
+    }
+
+    const groupSnap = groupRef ? await tx.get(groupRef) : null;
+
+    let finalGroupId = null;
+    let isNew = false;
+    let distance = null;
+
+    if (groupSnap && groupSnap.exists()) {
+      const group = groupSnap.data();
+      const firstSeq = group.items[0].seq;
+      const withinRange = Math.abs(parsed.seq - firstSeq) <= meta.maxGroupSize;
+      const withinCount = group.items.length < meta.maxGroupSize;
+      if (withinRange && withinCount) {
+        const match = findBestGroup(parsed, [{ id: group.id, prefix: group.prefix, items: group.items }], meta.tolerance);
+        if (match) {
+          finalGroupId = group.id;
+          distance = match.distance;
+          tx.set(groupRef, { id: group.id, prefix: group.prefix, items: [...group.items, parsed] });
+        }
+      }
+    }
+
+    if (finalGroupId === null) {
+      finalGroupId = meta.groupIdCounter;
+      meta.groupIdCounter += 1;
+      isNew = true;
+      tx.set(doc(groupsCol, String(finalGroupId)), { id: finalGroupId, prefix: parsed.prefix, items: [parsed] });
+    }
+
+    meta.totalScanned += 1;
+    meta.log = pushLog(meta.log, { ...logBaseOf(parsed), kind: isNew ? "new" : "merged", groupId: finalGroupId, distance });
+    meta.updatedAt = serverTimestamp();
+    tx.set(seenRef, { raw: parsed.raw });
+    tx.set(sessionRef, meta);
+
+    return { status: isNew ? "new" : "merged", groupId: finalGroupId, distance };
+  });
+
+  applyOptimisticLocalUpdate(parsed, outcome);
+  return outcome;
+}
+
+/** 送出一筆刷入：先在本機做格式檢查，通過後才呼叫 performScan 與所有使用者共同的資料比對、寫入 */
 async function submitScan(raw) {
   const parsed = parseSerialLenient(raw);
 
@@ -610,14 +666,7 @@ async function submitScan(raw) {
   }
 
   try {
-    const result = await runTransaction(db, async (tx) => {
-      const snap = await tx.get(sessionRef);
-      const data = ensureSessionDefaults(snap.exists() ? snap.data() : emptySessionData());
-      const outcome = applyScanToData(data, parsed);
-      data.updatedAt = serverTimestamp();
-      tx.set(sessionRef, data);
-      return outcome;
-    });
+    const result = await performScan(parsed);
 
     if (result.status === "duplicate") {
       setFeedback("↩ 重複略過", "text-red-600");
@@ -685,7 +734,7 @@ function parseSerialLenient(raw) {
   };
 }
 
-/** 連號頭尾過刷：只輸入起始與結束序號（可不含檢查碼），中間的連號由系統補齊並一次性送出 */
+/** 連號頭尾過刷：只輸入起始與結束序號（可不含檢查碼），中間的連號由系統補齊後依序送出 */
 async function submitRange() {
   const fromRaw = rangeFromInput.value.trim();
   const toRaw = rangeToInput.value.trim();
@@ -742,44 +791,30 @@ async function submitRange() {
   rangeFillBtn.disabled = true;
   setRangeFeedback(`批次帶入中...（${count} 張）`, "text-indigo-600");
 
+  let newCount = 0;
+  let mergedCount = 0;
+  let dupCount = 0;
+  const newGroupIds = new Set();
+  const mergedGroupIds = new Set();
+
   try {
-    const summary = await runTransaction(db, async (tx) => {
-      const snap = await tx.get(sessionRef);
-      const data = ensureSessionDefaults(snap.exists() ? snap.data() : emptySessionData());
-
-      let newCount = 0;
-      let mergedCount = 0;
-      let dupCount = 0;
-      const newGroupIds = new Set();
-      const mergedGroupIds = new Set();
-      for (const parsed of items) {
-        const outcome = applyScanToData(data, parsed);
-        if (outcome.status === "duplicate") {
-          dupCount++;
-        } else if (outcome.status === "new") {
-          newCount++;
-          newGroupIds.add(outcome.groupId);
-        } else {
-          mergedCount++;
-          mergedGroupIds.add(outcome.groupId);
-        }
+    for (const parsed of items) {
+      const outcome = await performScan(parsed);
+      if (outcome.status === "duplicate") {
+        dupCount++;
+      } else if (outcome.status === "new") {
+        newCount++;
+        newGroupIds.add(outcome.groupId);
+      } else {
+        mergedCount++;
+        mergedGroupIds.add(outcome.groupId);
       }
-
-      data.updatedAt = serverTimestamp();
-      tx.set(sessionRef, data);
-      return {
-        newCount,
-        mergedCount,
-        dupCount,
-        newGroupIds: [...newGroupIds],
-        mergedGroupIds: [...mergedGroupIds],
-      };
-    });
+    }
 
     const parts = [];
-    if (summary.newCount) parts.push(`新增群組 #${summary.newGroupIds.join("、#")}（${summary.newCount} 張）`);
-    if (summary.mergedCount) parts.push(`併入群組 #${summary.mergedGroupIds.join("、#")}（${summary.mergedCount} 張）`);
-    if (summary.dupCount) parts.push(`重複略過 ${summary.dupCount} 張`);
+    if (newCount) parts.push(`新增群組 #${[...newGroupIds].join("、#")}（${newCount} 張）`);
+    if (mergedCount) parts.push(`併入群組 #${[...mergedGroupIds].join("、#")}（${mergedCount} 張）`);
+    if (dupCount) parts.push(`重複略過 ${dupCount} 張`);
     setRangeFeedback(`✓ 完成：${parts.join("；")}`, "text-emerald-600");
     rangeFromInput.value = "";
     rangeToInput.value = "";
@@ -813,16 +848,26 @@ function updateSummaryStats() {
   document.getElementById("scanCardTotal").textContent = scanTotalCount;
 }
 
-document.getElementById("sortScanBtn").addEventListener("click", () => {
+document.getElementById("sortScanBtn").addEventListener("click", async () => {
   // 依「相近序號」排序群組顯示順序：先按前綴，再按群組起始流水號排序；群組編號 (id) 維持不變
-  // 排序結果寫回 Firestore，讓所有使用者看到一致的排序
+  // 排序結果寫成每個群組文件的 order 欄位，讓所有使用者看到一致的排序
   const sorted = [...scanGroups].sort((a, b) => {
     if (a.prefix !== b.prefix) return a.prefix < b.prefix ? -1 : 1;
     const aMin = Math.min(...a.items.map((i) => i.seq));
     const bMin = Math.min(...b.items.map((i) => i.seq));
     return aMin - bMin;
   });
-  updateDoc(sessionRef, { groups: sorted }).catch(() => {});
+  try {
+    for (let i = 0; i < sorted.length; i += 400) {
+      const batch = writeBatch(db);
+      sorted.slice(i, i + 400).forEach((g, offset) => {
+        batch.update(doc(groupsCol, String(g.id)), { order: i + offset });
+      });
+      await batch.commit();
+    }
+  } catch (err) {
+    // 忽略失敗，使用者可再按一次
+  }
 });
 
 document.getElementById("exportExcelBtn").addEventListener("click", () => {
@@ -860,7 +905,18 @@ document.getElementById("exportExcelBtn").addEventListener("click", () => {
 
 const RESET_PASSWORD = "8963";
 
-document.getElementById("resetScanBtn").addEventListener("click", () => {
+/** 刪除子集合內所有文件（分批，每批最多 400 筆，避開 Firestore batch 500 筆上限） */
+async function deleteAllDocsInCollection(colRef) {
+  const snap = await getDocs(colRef);
+  const docs = snap.docs;
+  for (let i = 0; i < docs.length; i += 400) {
+    const batch = writeBatch(db);
+    docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+}
+
+document.getElementById("resetScanBtn").addEventListener("click", async () => {
   const input = prompt("此動作會清空所有人的刷入資料，請輸入重置密碼：");
   if (input === null) return;
   if (input !== RESET_PASSWORD) {
@@ -868,15 +924,25 @@ document.getElementById("resetScanBtn").addEventListener("click", () => {
     return;
   }
   if (!confirm("確定要重置所有群組與統計嗎？此動作會影響所有正在使用的人員。")) return;
+
   scanErrCount = 0;
   document.getElementById("scanErr").textContent = 0;
   scanLog.innerHTML = "";
-  updateDoc(sessionRef, emptySessionData()).catch(() => {
-    // 文件尚不存在時 updateDoc 會失敗，改用 transaction 直接建立空白狀態
-    runTransaction(db, async (tx) => {
-      tx.set(sessionRef, emptySessionData());
-    }).catch(() => {});
-  });
+
+  const resetBtn = document.getElementById("resetScanBtn");
+  const originalLabel = resetBtn.textContent;
+  resetBtn.disabled = true;
+  resetBtn.textContent = "重置中...";
+  try {
+    await deleteAllDocsInCollection(groupsCol);
+    await deleteAllDocsInCollection(seenCol);
+    await setDoc(sessionRef, emptySessionData());
+  } catch (err) {
+    alert("重置失敗，請重試");
+  } finally {
+    resetBtn.disabled = false;
+    resetBtn.textContent = originalLabel;
+  }
 });
 
 /* ---------- 整理結果分頁：全部刷完後，依連號整理為一組一列，供序號與實體同步核對 ---------- */
@@ -1083,18 +1149,15 @@ queryInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") runSerialQuery();
 });
 
-/* ---------- Firestore 即時同步：任何使用者的刷入/排序/核對/重置都會即時反映到這裡 ---------- */
-let firstSnapshotHandled = false;
-
+/* ---------- Firestore 即時同步：meta 文件（設定/統計/紀錄）與 groups 子集合（群組本體）分開監聽 ---------- */
 onSnapshot(
   sessionRef,
   (snap) => {
-    const data = snap.exists() ? snap.data() : emptySessionData();
-    const remoteGroups = Array.isArray(data.groups) ? data.groups : [];
+    const data = ensureSessionDefaults(snap.exists() ? snap.data() : emptySessionData());
 
     // 容忍值：其他使用者調整過就同步過來（自己正在拖曳/輸入時不覆蓋）
     const toleranceFocused = document.activeElement === toleranceSlider || document.activeElement === toleranceValue;
-    if (!toleranceFocused && typeof data.tolerance === "number" && data.tolerance !== tolerance) {
+    if (!toleranceFocused && data.tolerance !== tolerance) {
       applyingRemoteTolerance = true;
       setToleranceLocal(data.tolerance);
       applyingRemoteTolerance = false;
@@ -1102,51 +1165,77 @@ onSnapshot(
 
     // 群組上限張數：其他使用者調整過就同步過來（自己正在拖曳/輸入時不覆蓋）
     const maxGroupSizeFocused = document.activeElement === maxGroupSizeSlider || document.activeElement === maxGroupSizeValue;
-    if (!maxGroupSizeFocused && typeof data.maxGroupSize === "number" && data.maxGroupSize !== maxGroupSize) {
+    if (!maxGroupSizeFocused && data.maxGroupSize !== maxGroupSize) {
       applyingRemoteMaxGroupSize = true;
       setMaxGroupSizeLocal(data.maxGroupSize);
       applyingRemoteMaxGroupSize = false;
     }
 
-    scanTotalCount = typeof data.totalScanned === "number" ? data.totalScanned : 0;
+    scanTotalCount = data.totalScanned;
     document.getElementById("scanTotal").textContent = scanTotalCount;
 
     syncedSegments.clear();
-    (data.syncedSegments || []).forEach((key) => syncedSegments.set(key, true));
+    data.syncedSegments.forEach((key) => syncedSegments.set(key, true));
 
-    sharedLogCache = Array.isArray(data.log) ? data.log : [];
+    sharedLogCache = data.log;
     renderCombinedLog();
 
-    // 重置偵測：群組數從有變無，整批清空重繪
+    updateSummaryStats();
+    if (!scanResultView.classList.contains("hidden")) renderResultView();
+
+    syncStatus.textContent = snap.metadata.fromCache ? "離線快取" : "已同步";
+    syncStatus.className = `text-sm px-2 py-1 rounded-full ${
+      snap.metadata.fromCache ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
+    }`;
+  },
+  () => {
+    syncStatus.textContent = "連線失敗";
+    syncStatus.className = "text-sm px-2 py-1 rounded-full bg-red-50 text-red-600";
+  }
+);
+
+let groupsInitialLoadDone = false;
+
+onSnapshot(
+  groupsCol,
+  (snap) => {
     let latestScannedItem = null;
-    if (remoteGroups.length === 0) {
-      scanGroups = [];
-      localGroupMeta.clear();
-      renderScanGroups();
-    } else {
-      const remoteIds = new Set();
-      remoteGroups.forEach((g) => {
-        remoteIds.add(g.id);
-        const prevMeta = localGroupMeta.get(g.id);
-        const isNewGroup = !prevMeta;
-        const itemCountChanged = prevMeta && prevMeta.itemCount !== g.items.length;
-        if (isNewGroup || itemCountChanged) {
-          const lastItem = g.items[g.items.length - 1];
-          updateGroupCard(g, isNewGroup, lastItem ? lastItem.seqStr : null, false);
-          if (lastItem) latestScannedItem = { seq: lastItem.seq, prefix: g.prefix, operator: lastItem.scannedBy || null };
-        }
-        localGroupMeta.set(g.id, { itemCount: g.items.length });
-      });
-      // 若排序後陣列順序改變，整批重繪一次以反映新順序（排序是低頻操作，不影響 2000 張規模的逐筆效能）
-      const orderChanged = remoteGroups.map((g) => g.id).join(",") !== scanGroups.map((g) => g.id).join(",");
-      scanGroups = remoteGroups;
-      if (orderChanged && firstSnapshotHandled) {
-        renderScanGroups();
+
+    snap.docChanges().forEach((change) => {
+      const g = change.doc.data();
+
+      if (change.type === "removed") {
+        scanGroups = scanGroups.filter((x) => x.id !== g.id);
+        const el = scanGroupEls.get(g.id);
+        if (el) el.remove();
+        scanGroupEls.delete(g.id);
+        localGroupMeta.delete(g.id);
+        return;
       }
-      // 移除已消失的群組（理論上只會發生在重置，上面已處理，這裡防呆）
-      [...localGroupMeta.keys()].forEach((id) => {
-        if (!remoteIds.has(id)) localGroupMeta.delete(id);
-      });
+
+      const prevMeta = localGroupMeta.get(g.id);
+      const isTrulyNew = groupsInitialLoadDone && !prevMeta;
+      const itemCountChanged = prevMeta && prevMeta.itemCount !== g.items.length;
+
+      const idx = scanGroups.findIndex((x) => x.id === g.id);
+      if (idx === -1) scanGroups.push(g);
+      else scanGroups[idx] = g;
+
+      if (groupsInitialLoadDone && (isTrulyNew || itemCountChanged)) {
+        const lastItem = g.items[g.items.length - 1];
+        updateGroupCard(g, isTrulyNew, lastItem ? lastItem.seqStr : null, false);
+        if (lastItem) latestScannedItem = { seq: lastItem.seq, prefix: g.prefix, operator: lastItem.scannedBy || null };
+      }
+      localGroupMeta.set(g.id, { itemCount: g.items.length });
+    });
+
+    if (!groupsInitialLoadDone) {
+      scanGroups.sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id));
+      renderScanGroups();
+      groupsInitialLoadDone = true;
+    } else if (scanGroups.length === 0) {
+      // 重置後子集合清空，補上「尚無群組」的提示畫面
+      renderScanGroups();
     }
 
     updateSummaryStats();
@@ -1155,13 +1244,6 @@ onSnapshot(
       renderResultView();
       scrollToHighlightedRow();
     }
-
-    syncStatus.textContent = snap.metadata.fromCache ? "離線快取" : "已同步";
-    syncStatus.className = `text-sm px-2 py-1 rounded-full ${
-      snap.metadata.fromCache ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
-    }`;
-
-    firstSnapshotHandled = true;
   },
   () => {
     syncStatus.textContent = "連線失敗";
