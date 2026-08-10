@@ -136,6 +136,16 @@
         </div>
         <div id="scanGroupsView" class="space-y-2 max-h-[640px] overflow-y-auto"></div>
         <div id="scanResultView" class="hidden max-h-[640px] overflow-y-auto">
+          <div class="flex items-center gap-4 mb-2 text-sm text-slate-500">
+            <label class="flex items-center gap-1.5 select-none cursor-pointer">
+              <input id="jumpOnlyMineToggle" type="checkbox" class="w-4 h-4" />
+              只跳轉我自己刷的
+            </label>
+            <label class="flex items-center gap-1.5 select-none cursor-pointer">
+              跳轉底色
+              <input id="jumpHighlightColorInput" type="color" value="#a7f3d0" class="w-8 h-6 border border-slate-300 rounded cursor-pointer" />
+            </label>
+          </div>
           <table class="w-full text-base table-fixed">
             <colgroup>
               <col class="w-16" />
@@ -931,6 +941,33 @@ function computeDisplaySeqs(segments) {
   return seqs;
 }
 
+/* 整理結果的「跳轉到最新刷入」設定：可選只跳自己刷的、可自訂底色，底色會一直留著直到下一張刷入才轉移 */
+let jumpOnlyMine = localStorage.getItem("voucherReturnsJumpOnlyMine") === "1";
+let jumpHighlightColor = localStorage.getItem("voucherReturnsJumpColor") || "#a7f3d0";
+let highlightedSegKey = null;
+
+const jumpOnlyMineToggle = document.getElementById("jumpOnlyMineToggle");
+const jumpHighlightColorInput = document.getElementById("jumpHighlightColorInput");
+jumpOnlyMineToggle.checked = jumpOnlyMine;
+jumpHighlightColorInput.value = jumpHighlightColor;
+
+jumpOnlyMineToggle.addEventListener("change", () => {
+  jumpOnlyMine = jumpOnlyMineToggle.checked;
+  localStorage.setItem("voucherReturnsJumpOnlyMine", jumpOnlyMine ? "1" : "0");
+});
+jumpHighlightColorInput.addEventListener("input", () => {
+  jumpHighlightColor = jumpHighlightColorInput.value;
+  localStorage.setItem("voucherReturnsJumpColor", jumpHighlightColor);
+  // 顏色改變時，若目前有高亮中的列，立刻套用新顏色
+  if (highlightedSegKey) applyHighlightStyle();
+});
+
+function applyHighlightStyle() {
+  scanResultBody.querySelectorAll("tr[data-seg-key]").forEach((row) => {
+    row.style.backgroundColor = row.dataset.segKey === highlightedSegKey ? jumpHighlightColor : "";
+  });
+}
+
 function renderResultView() {
   const segments = computeAllSegments();
   if (segments.length === 0) {
@@ -943,8 +980,9 @@ function renderResultView() {
     const checked = syncedSegments.get(key) ? "checked" : "";
     const scannedTime = s.lastScannedAt ? formatLogTime(s.lastScannedAt) : "-";
     const scannedBy = s.lastScannedBy || "-";
+    const highlightStyle = key === highlightedSegKey ? ` style="background-color:${jumpHighlightColor};"` : "";
     return `
-      <tr class="border-b border-slate-100 hover:bg-slate-50 align-middle" data-seg-key="${key}">
+      <tr class="border-b border-slate-100 hover:bg-slate-50 align-middle" data-seg-key="${key}"${highlightStyle}>
         <td class="py-2 px-2 text-center text-emerald-600 font-bold">${displaySeqs[idx]}</td>
         <td class="py-2 px-2 text-center font-mono text-indigo-600 font-semibold">#${s.groupId}</td>
         <td class="py-2 px-2 text-center"><input type="checkbox" class="sync-checkbox w-5 h-5" ${checked} /></td>
@@ -958,21 +996,20 @@ function renderResultView() {
   }).join("");
 }
 
-/** 刷入新序號時，若目前正在看整理結果分頁，自動捲動到該序號所在的那一列 */
-function scrollResultViewToItem(target) {
-  const rows = scanResultBody.querySelectorAll("tr[data-seg-key]");
-  for (const row of rows) {
-    const [prefix, fromStr, toStr] = row.dataset.segKey.split("|");
-    if (prefix !== target.prefix) continue;
-    const fromSeq = parseInt(fromStr, 10);
-    const toSeq = parseInt(toStr, 10);
-    if (target.seq >= fromSeq && target.seq <= toSeq) {
-      row.scrollIntoView({ behavior: "smooth", block: "center" });
-      row.classList.add("bg-emerald-50");
-      setTimeout(() => row.classList.remove("bg-emerald-50"), 1500);
-      break;
-    }
-  }
+/** 刷入新序號時，若符合「只跳自己的」設定，更新要高亮/捲動到的那一列（底色會停留到下一張刷入才轉移） */
+function updateHighlightTarget(target) {
+  if (jumpOnlyMine && target.operator !== operatorCode) return;
+  const segments = computeAllSegments();
+  const seg = segments.find(
+    (s) => s.prefix === target.prefix && target.seq >= s.from.seq && target.seq <= s.to.seq
+  );
+  if (seg) highlightedSegKey = segmentKey(seg.prefix, seg.from, seg.to);
+}
+
+function scrollToHighlightedRow() {
+  if (!highlightedSegKey) return;
+  const row = scanResultBody.querySelector(`tr[data-seg-key="${CSS.escape(highlightedSegKey)}"]`);
+  if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 scanResultBody.addEventListener("change", (e) => {
@@ -999,7 +1036,10 @@ function switchScanSubTab(target) {
   setSubTabActive(scanSubTabGroupsBtn, target === "groups");
   setSubTabActive(scanSubTabResultBtn, target === "result");
   setSubTabActive(scanSubTabQueryBtn, target === "query");
-  if (target === "result") renderResultView();
+  if (target === "result") {
+    renderResultView();
+    scrollToHighlightedRow();
+  }
   if (target === "query") queryInput.focus();
 }
 
@@ -1093,7 +1133,7 @@ onSnapshot(
         if (isNewGroup || itemCountChanged) {
           const lastItem = g.items[g.items.length - 1];
           updateGroupCard(g, isNewGroup, lastItem ? lastItem.seqStr : null, false);
-          if (lastItem) latestScannedItem = { seq: lastItem.seq, prefix: g.prefix };
+          if (lastItem) latestScannedItem = { seq: lastItem.seq, prefix: g.prefix, operator: lastItem.scannedBy || null };
         }
         localGroupMeta.set(g.id, { itemCount: g.items.length });
       });
@@ -1110,9 +1150,10 @@ onSnapshot(
     }
 
     updateSummaryStats();
+    if (latestScannedItem) updateHighlightTarget(latestScannedItem);
     if (!scanResultView.classList.contains("hidden")) {
       renderResultView();
-      if (latestScannedItem) scrollResultViewToItem(latestScannedItem);
+      scrollToHighlightedRow();
     }
 
     syncStatus.textContent = snap.metadata.fromCache ? "離線快取" : "已同步";
