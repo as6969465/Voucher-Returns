@@ -261,7 +261,7 @@ h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:
   <div class="panel">
     <div class="tools">
       <input id="flQ" type="search" placeholder="找商品所在儲位…" list="itemList">
-      <button type="button" class="b" id="btn3d" aria-pressed="false">斜二測立體</button>
+      <button type="button" class="b" id="btn3d" aria-pressed="false" hidden>斜二測立體</button>
       <button type="button" class="b" id="btnEdit" aria-pressed="false">編輯儲位配置</button>
       <span class="cnt" id="flTitle"></span>
     </div>
@@ -537,7 +537,6 @@ PROC.forEach(r=>ITEMS['P'+r[0]]={name:`成品#${r[0]} ${r[2]}`,kind:2,seq:'P'+St
 const nameToKey={};Object.entries(ITEMS).forEach(([k,v])=>nameToKey[v.name]=k);
 itemList.innerHTML=Object.values(ITEMS).map(v=>`<option value="${esc(v.name)}"></option>`).join('');
 const sel=new Set();let mvDir='in',mode3d=false,editMode=false,noEd=false,draft=null;
-try{mode3d=localStorage.getItem('fb27-3d')==='1'}catch(e){}
 const slotId=(z,row,b)=>`DD-${z}${row}-${String(b).padStart(2,'0')}`;
 const short=id=>id.slice(3);
 const slotIds=()=>{const L=layout(),r=[];L.zones.forEach(z=>{for(let row=1;row<=z.r;row++)for(let b=1;b<=z.b;b++)r.push(slotId(z.n,row,b))});return r.filter(id=>!L.blocked.includes(id))};
