@@ -95,11 +95,11 @@ button.b.sm{padding:1px 8px;font-size:12px}
 .bays{display:grid;gap:3px}
 .slot{border:1px solid var(--line);background:var(--panel);border-radius:3px;height:40px;padding:2px 3px;font-size:10px;line-height:1.2;cursor:pointer;overflow:hidden;text-align:left;color:var(--ink);font-family:var(--body)}
 .slot .id{font-family:var(--mono);color:var(--mute);font-size:9.5px;display:block}
-.slot.f1{background:var(--gold-soft);border-color:var(--gold)}
-.slot.f2{background:var(--ok-soft);border-color:var(--ok)}
+.slot.f1{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.slot.f2{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
 .slot.hl{outline:3px solid var(--accent);outline-offset:-1px}
-.slot.sel{background:var(--accent)!important;color:#fff;border-color:var(--accent)}
-.slot.sel .id{color:#fff}
+.slot.sel{background:var(--ink)!important;color:var(--bg)!important;border-color:var(--ink)}
+.slot.sel .id{color:var(--bg)}
 .areas{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .areas div{border:1px solid var(--line);background:var(--panel);border-radius:4px;padding:6px;font-size:12px;text-align:center;color:var(--mute)}
 .side{display:flex;flex-direction:column;gap:12px;min-width:0}
@@ -199,6 +199,23 @@ h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:
 .pact{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 #v-inbound input.qty{-moz-appearance:textfield;appearance:textfield}
 #v-inbound input.qty::-webkit-outer-spin-button,#v-inbound input.qty::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.thumb{width:40px;height:40px;padding:0;border:1px dashed var(--accent);border-radius:4px;background:var(--accent-soft);color:var(--accent);font-size:18px;cursor:pointer;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle}
+.ibtn{font:inherit;font-size:11px;line-height:1;padding:3px 5px;margin-right:6px;border:1px solid var(--accent);border-radius:3px;background:var(--accent-soft);color:var(--accent);cursor:pointer;vertical-align:1px}
+.ibtn:hover{background:var(--accent);color:#fff}
+.gal{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;width:100%;padding:8px}
+.gal figure{margin:0;display:grid;gap:4px;justify-items:center}
+.gal figcaption{font-size:12px;color:var(--mute)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#imgModal{z-index:60}
+.slinfo{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0}
+.slinfo dt{color:var(--mute);font-size:12.5px}
+.slinfo dd{margin:0;font-weight:500}
+.sllog{font-size:12.5px;display:grid;gap:4px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.plan.io .slot:not(.off){cursor:copy}
+.thumb.has{border-style:solid;background:var(--panel)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.imgview{min-height:160px;display:flex;align-items:center;justify-content:center;background:var(--sunk);border-radius:6px;overflow:hidden}
+.imgview img{max-width:100%;max-height:60vh;display:block}
 #inCal td.lbl{left:0;min-width:180px}
 #inCal td.n{min-width:48px;text-align:center}
 .navrow{display:flex;align-items:flex-end;gap:8px;border-bottom:2px solid var(--accent)}
@@ -235,14 +252,45 @@ h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:
   <div class="panel" id="sp-log" hidden>
     <h2>進貨驗收登錄<span>預計進倉日、實收數量、實際到貨日皆可修改，會同步到加工排程</span></h2>
     <div class="tools">
+      <button type="button" class="b p" id="itAdd">＋ 新增品項</button>
       <input id="inQ" type="search" placeholder="搜尋款式或 IP…">
       <select id="inWin"><option value="">全部進倉時段</option></select>
       <select id="inSt"><option value="">全部狀態</option><option>未到</option><option>部分到貨</option><option>已到齊</option><option>逾期未到</option></select>
       <span class="cnt" id="inCnt"></span>
     </div>
-    <div class="tbl"><table><thead><tr><th class="n">序</th><th>款式</th><th>IP</th><th class="n">大肚應進量</th><th>外箱</th><th class="n">箱入</th><th class="n">箱數</th><th>預計進倉日</th><th class="n">實收</th><th>實際到貨日</th><th>狀態</th></tr></thead><tbody id="inBody"></tbody></table></div>
+    <div class="tbl"><table><thead><tr><th class="n">序</th><th>圖片</th><th>款式</th><th>IP</th><th class="n">大肚應進量</th><th>外箱</th><th class="n">箱入</th><th class="n">箱數</th><th>預計進倉日</th><th class="n">實收</th><th>實際到貨日</th><th>狀態</th></tr></thead><tbody id="inBody"></tbody></table></div>
   </div>
 </section>
+
+<div class="modal" id="imgModal" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="imgTitle">
+    <h2 id="imgTitle">商品圖片</h2>
+    <div class="imgview" id="imgView"></div>
+    <div class="msg" id="imgMsg"></div>
+    <p class="note">上傳後會自動壓縮到 200KB 以內（JPG）。</p>
+    <div class="tools" style="justify-content:flex-end;margin:0"><button type="button" class="b" id="imgDel">刪除圖片</button><button type="button" class="b" id="imgClose">關閉</button><button type="button" class="b p" id="imgPick">上傳圖片</button></div>
+  </div>
+</div>
+
+<div class="modal" id="itModal" hidden>
+  <form class="dlg" id="itForm" role="dialog" aria-modal="true" aria-labelledby="itTitle">
+    <h2 id="itTitle">新增品項</h2>
+    <label class="lab">款式（可選既有款式或輸入新款式）<input id="itCat" list="catList" required maxlength="40"></label>
+    <label class="lab">IP<input id="itIp" required maxlength="40"></label>
+    <div class="grid2">
+      <label class="lab">應進量（件）<input id="itNeed" type="number" min="0" step="1" inputmode="numeric" required></label>
+      <label class="lab">箱入數<input id="itPer" type="number" min="1" step="1" inputmode="numeric"></label>
+    </div>
+    <label class="lab">外箱尺寸（cm，未定可留空）<input id="itBox" maxlength="40" placeholder="例：54*35*40"></label>
+    <div class="grid2">
+      <label class="lab">預計進倉起<input id="itWs" type="date"></label>
+      <label class="lab">預計進倉迄<input id="itWe" type="date"></label>
+    </div>
+    <div class="msg" id="itMsg"></div>
+    <div class="tools" style="justify-content:flex-end;margin:0"><button type="button" class="b" id="itDel" hidden>刪除此品項</button><button type="button" class="b" id="itRevert" hidden>還原檔案原值</button><button type="button" class="b" id="itCancel">取消</button><button class="b p" type="submit">儲存</button></div>
+  </form>
+</div>
+<datalist id="catList"></datalist>
 
 <!-- 加工排程 -->
 <section id="v-schedule" class="stack" hidden>
@@ -264,6 +312,7 @@ h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:
     <div class="tools">
       <input id="flQ" type="search" placeholder="找商品所在儲位…" list="itemList">
       <button type="button" class="b" id="btn3d" aria-pressed="false" hidden>斜二測立體</button>
+      <button type="button" class="b p" id="btnIO" aria-pressed="false">進出貨</button>
       <button type="button" class="b" id="btnEdit" aria-pressed="false">編輯儲位配置</button>
       <span class="cnt" id="flTitle"></span>
     </div>
@@ -276,7 +325,7 @@ h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:
       <div class="tools"><button type="button" class="b" id="edCancel">取消</button><span class="msg" id="edMsg"></span></div>
     </div>
     <div class="floor"><div class="plan" id="plan"></div></div>
-    <div class="legend"><span><i style="background:var(--panel);border:1px solid var(--line)"></i>空板位</span><span><i style="background:var(--gold-soft);border:1px solid var(--gold)"></i>原物料</span><span><i style="background:var(--ok-soft);border:1px solid var(--ok)"></i>福袋成品</span><span><i style="background:var(--accent);"></i>已選取</span><span>點格子選取（可複選），再按入庫或出庫；同一板不可混放不同品項</span></div>
+    <div class="legend"><span><i style="background:var(--panel);border:1px solid var(--line)"></i>空板位</span><span><i style="background:var(--accent-soft);border:1px solid var(--accent)"></i>未加工（進貨商品）</span><span><i style="background:var(--ok-soft);border:1px solid var(--ok)"></i>已加工（福袋成品）</span><span><i style="background:var(--ink);"></i>已選取</span><span>點格子查看存放商品；按「進出貨」後可複選格子入庫或出庫，同一板不可混放不同品項</span></div>
     <div class="selbar" id="selbar" hidden>
       <span id="selTxt"></span>
       <button type="button" class="b p" id="openIn">入庫</button>
@@ -294,12 +343,21 @@ h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:
   <datalist id="itemList"></datalist>
 </section>
 
+<div class="modal" id="slotModal" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="slTitle">
+    <h2 id="slTitle">儲位</h2>
+    <div id="slBody"></div>
+    <div class="tools" style="justify-content:flex-end;margin:0"><button type="button" class="b" id="slClose">關閉</button></div>
+  </div>
+</div>
 <div class="modal" id="modal" hidden>
   <form class="dlg" id="mvForm" role="dialog" aria-modal="true" aria-labelledby="mvTitle">
     <h2 id="mvTitle">入庫</h2>
     <div class="chips" id="mvSlots"></div>
     <div class="seg2"><button type="button" id="mvIn" aria-pressed="true">入庫</button><button type="button" id="mvOut" aria-pressed="false">出庫</button></div>
-    <label class="lab" id="mvItemL">商品（所有選取板位放同一品項）<input id="mvItem" list="itemList" placeholder="輸入序號或款式名稱選取" autocomplete="off"></label>
+    <div class="seg2" id="mvKind"><button type="button" id="mvRaw" aria-pressed="true">未加工</button><button type="button" id="mvDone" aria-pressed="false">已加工</button></div>
+    <label class="lab" id="mvItemL"><span id="mvItemTxt">進貨商品（所有選取板位放同一品項）</span><input id="mvItem" list="listRaw" placeholder="輸入序號或款式名稱選取" autocomplete="off"></label>
+    <datalist id="listRaw"></datalist><datalist id="listDone"></datalist>
     <label class="lab chk" id="mvAllL"><input type="checkbox" id="mvAll" checked> 整板出清（每格全部出庫）</label>
     <label class="lab" id="mvQtyL">每格數量（件）<input id="mvQty" type="number" min="1" step="1" inputmode="numeric"></label>
     <label class="lab">備註<input id="mvNote" placeholder="例：第 2 車、轉加工區"></label>
@@ -356,6 +414,21 @@ function banner(t){const b=document.getElementById('banner');b.textContent=t;b.h
 
 // ---------- 進貨 ----------
 INB.forEach(r=>{const m=/^(\d+)\/(\d+)-(\d+)\/(\d+)$/.exec(r[7]);r.win0=m?[D(+m[1],+m[2]),D(+m[3],+m[4])]:null});
+// 手動新增／修改品項：檔案原始品項存為 BASE，進貨紀錄（inb 文件）中的 cat/ip/need/box/per 覆蓋原值；custom:true 為新增品項
+const BASE=INB.map(r=>Object.assign([...r],{win0:r.win0}));
+const pWin=s=>{const m=/^(\d+)\/(\d+)-(\d+)\/(\d+)$/.exec(s||'');return m?[D(+m[1],+m[2]),D(+m[3],+m[4])]:null};
+function rebuildINB(){
+  const rows=BASE.map(b=>{const o=S.inb[b[0]]||{};const r=[b[0],o.cat??b[1],o.ip??b[2],o.need??b[3],o.box??b[4],o.per??b[5],0,b[7]];r.win0=b.win0;return r});
+  Object.entries(S.inb).filter(([id,o])=>o.custom).sort((a,b)=>a[0]-b[0]).forEach(([id,o])=>{const r=[+id,o.cat||'未分類',o.ip||'',o.need||0,o.box||'',o.per||null,0,'待確認'];r.win0=null;rows.push(r)});
+  rows.forEach(r=>{r[6]=r[5]?Math.ceil(r[3]/r[5]):null});
+  INB.length=0;rows.forEach(r=>INB.push(r));
+  if(typeof ITEMS!=='undefined'){
+    Object.keys(ITEMS).filter(k=>k[0]==='I').forEach(k=>delete ITEMS[k]);
+    INB.forEach(r=>ITEMS['I'+r[0]]={name:`#${r[0]} ${r[1]}（${r[2]}）`,kind:1,seq:'I'+String(r[0]).padStart(3,'0')});
+    Object.keys(nameToKey).forEach(k=>delete nameToKey[k]);Object.entries(ITEMS).forEach(([k,v])=>nameToKey[v.name]=k);
+    itemList.innerHTML=Object.values(ITEMS).map(v=>`<option value="${esc(v.name)}"></option>`).join('');
+  }
+}
 const isoD=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const isoP=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
 // 預計進倉時段：手動修改值優先，否則用檔案值
@@ -390,7 +463,7 @@ function renderInbound(){
   h+=`<tr class="grp"><td>11 月 → 12 月</td><td></td>${ds.map(d=>`<td class="d">${d.getDate()===16||d.getDate()===1?(d.getMonth()+1)+'月':''}</td>`).join('')}</tr>`;
   cats.forEach(cat=>{
     const rs=INB.filter(r=>r[1]===cat);const done=rs.every(r=>inState(r)[0]==='已到齊');
-    h+=`<tr><td class="lbl" title="${esc(cat)}">${esc(cat)}</td><td class="n">${rs.length}</td>${ds.map(d=>{const on=rs.some(r=>{const w=winOf(r);return w&&d>=w[0]&&d<=w[1]});return`<td class="d ${on?'on':''} ${on&&done?'done':''}"></td>`}).join('')}</tr>`;
+    h+=`<tr><td class="lbl" title="${esc(cat)}">${imgBtn(rs.map(r=>r[0]))}${esc(cat)}</td><td class="n">${rs.length}</td>${ds.map(d=>{const on=rs.some(r=>{const w=winOf(r);return w&&d>=w[0]&&d<=w[1]});return`<td class="d ${on?'on':''} ${on&&done?'done':''}"></td>`}).join('')}</tr>`;
   });
   document.getElementById('inCal').innerHTML=h+'</tbody></table>';
   renderInTable();
@@ -400,13 +473,129 @@ function renderInTable(){
   const rows=INB.filter(r=>(!q||(r[1]+r[2]).includes(q))&&(!w||winTxt(r)===w)&&(!f||inState(r)[0]===f));
   let h='',cat='';
   rows.forEach(r=>{
-    if(r[1]!==cat){cat=r[1];h+=`<tr class="grp"><td colspan="11">${esc(cat)}</td></tr>`}
+    if(r[1]!==cat){cat=r[1];h+=`<tr class="grp"><td colspan="12">${esc(cat)}</td></tr>`}
     const s=inState(r),got=(S.inb[r[0]]||{}).qty;
-    h+=`<tr><td class="n">${r[0]}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td class="n">${num(r[3])}</td><td>${r[4]?esc(r[4]):'<span class="pill s-warn">確認中</span>'}</td><td class="n">${num(r[5])}</td><td class="n">${num(r[6])}</td><td><span class="rng"><input class="dt" type="date" id="iws${r[0]}" data-ws="${r[0]}" value="${winOf(r)?isoD(winOf(r)[0]):''}" ${canWrite?'':'disabled'} aria-label="第${r[0]}項預計進倉起">–<input class="dt" type="date" id="iwe${r[0]}" data-we="${r[0]}" value="${winOf(r)?isoD(winOf(r)[1]):''}" ${canWrite?'':'disabled'} aria-label="第${r[0]}項預計進倉迄">${(S.inb[r[0]]||{}).ws?'<span class="pill s-warn">已改</span>':''}</span></td>
+    const hasImg=(S.inb[r[0]]||{}).img;
+    h+=`<tr><td class="n">${r[0]}<br><button type="button" class="ibtn" data-itedit="${r[0]}" ${canWrite?'':'disabled'}>修改</button>${(S.inb[r[0]]||{}).custom?'<br><span class="pill s-ok">新增</span>':''}</td><td><button type="button" class="thumb ${hasImg?'has':''}" data-img="${r[0]}" aria-label="第${r[0]}項商品圖片">${hasImg?(IMG[r[0]]?`<img src="${IMG[r[0]]}" alt="">`:'…'):'＋'}</button></td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td class="n">${num(r[3])}</td><td>${r[4]?esc(r[4]):'<span class="pill s-warn">確認中</span>'}</td><td class="n">${num(r[5])}</td><td class="n">${num(r[6])}</td><td><span class="rng"><input class="dt" type="date" id="iws${r[0]}" data-ws="${r[0]}" value="${winOf(r)?isoD(winOf(r)[0]):''}" ${canWrite?'':'disabled'} aria-label="第${r[0]}項預計進倉起">–<input class="dt" type="date" id="iwe${r[0]}" data-we="${r[0]}" value="${winOf(r)?isoD(winOf(r)[1]):''}" ${canWrite?'':'disabled'} aria-label="第${r[0]}項預計進倉迄">${(S.inb[r[0]]||{}).ws?'<span class="pill s-warn">已改</span>':''}</span></td>
     <td class="n"><input class="qty" id="inq${r[0]}" data-in="${r[0]}" type="number" min="0" value="${got??''}" placeholder="0" ${canWrite?'':'disabled'} aria-label="第${r[0]}項實收數量"></td><td><input class="dt" type="date" id="ina${r[0]}" data-arr="${r[0]}" value="${(S.inb[r[0]]||{}).arrived||''}" min="2026-11-01" max="2027-01-10" ${canWrite?'':'disabled'} aria-label="第${r[0]}項實際到貨日"></td><td><span class="pill ${s[1]}">${s[0]}</span></td></tr>`});
-  inBody.innerHTML=h||'<tr><td colspan="11">沒有符合的品項</td></tr>';
+  inBody.innerHTML=h||'<tr><td colspan="12">沒有符合的品項</td></tr>';
   inCnt.textContent=`${rows.length} 項・${num(rows.reduce((a,r)=>a+r[3],0))} 件`;
+  rows.forEach(r=>{if((S.inb[r[0]]||{}).img&&!(r[0] in IMG))loadImg(r[0])});
 }
+
+// ---------- 品項新增／修改 ----------
+let itId=null;
+function openItem(id){
+  itId=id;const r=id?INB.find(x=>x[0]===id):null,o=id?(S.inb[id]||{}):{};
+  catList.innerHTML=[...new Set(INB.map(x=>x[1]))].map(c=>`<option value="${esc(c)}"></option>`).join('');
+  itTitle.textContent=id?`修改品項 #${id}`:'新增品項';
+  itCat.value=r?r[1]:'';itIp.value=r?r[2]:'';itNeed.value=r?r[3]:'';itPer.value=r&&r[5]?r[5]:'';itBox.value=r?r[4]:'';
+  const w=r?winOf(r):null;itWs.value=w?isoD(w[0]):'';itWe.value=w?isoD(w[1]):'';
+  itDel.hidden=!(o.custom);itRevert.hidden=!id||o.custom||!['cat','ip','need','box','per'].some(k=>k in o);
+  itMsg.className='msg';itMsg.textContent='';itModal.hidden=false;itCat.focus();
+}
+itAdd.addEventListener('click',()=>{if(canWrite)openItem(null)});
+inBody.addEventListener('click',e=>{const b=e.target.closest('[data-itedit]');if(b)openItem(+b.dataset.itedit)});
+itCancel.addEventListener('click',()=>{itModal.hidden=true});
+itModal.addEventListener('click',e=>{if(e.target===itModal)itModal.hidden=true});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!itModal.hidden)itModal.hidden=true});
+itForm.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const err=s=>{itMsg.className='msg err';itMsg.textContent=s};
+  const need=parseInt(itNeed.value,10),per=itPer.value?parseInt(itPer.value,10):null;
+  if(!itCat.value.trim()||!itIp.value.trim())return err('請填寫款式與 IP。');
+  if(!(need>=0))return err('應進量需為 0 以上的整數。');
+  if(per!==null&&!(per>0))return err('箱入數需為正整數，未定可留空。');
+  if(!!itWs.value!==!!itWe.value)return err('預計進倉起迄請一起填寫，或都留空。');
+  const ws=itWs.value,we=itWe.value&&itWe.value<itWs.value?itWs.value:itWe.value;
+  const id=itId||Math.max(...INB.map(r=>r[0]))+1;
+  const cur=Object.assign({qty:0,arrived:''},S.inb[id],{cat:itCat.value.trim(),ip:itIp.value.trim(),need,box:itBox.value.trim(),per,at:Date.now()});
+  if(!itId)cur.custom=true;
+  if(ws){cur.ws=ws;cur.we=we}else{delete cur.ws;delete cur.we}
+  if(await write('inb',id,cur)){itModal.hidden=true}
+});
+itRevert.addEventListener('click',async()=>{const cur=Object.assign({},S.inb[itId]);['cat','ip','need','box','per'].forEach(k=>delete cur[k]);cur.at=Date.now();if(await write('inb',itId,cur))itModal.hidden=true});
+itDel.addEventListener('click',async()=>{
+  const id=itId,k='I'+id;
+  if(Object.values(S.slots).some(s=>s.item===k&&s.qty>0)){itMsg.className='msg err';itMsg.textContent='儲位上還有這個品項的庫存，請先出庫再刪除。';return}
+  if(!itDel.dataset.sure){itDel.dataset.sure='1';itDel.textContent='確定刪除？';setTimeout(()=>{delete itDel.dataset.sure;itDel.textContent='刪除此品項'},4000);return}
+  delete itDel.dataset.sure;itDel.textContent='刪除此品項';
+  delete S.inb[id];rebuildINB();emit();itModal.hidden=true;
+  if(db){try{await db.collection('inb').doc(String(id)).delete()}catch(e){banner('刪除失敗（'+(e&&e.code||'unknown')+'）。')}}
+});
+// ---------- 商品圖片：前端壓縮至 200KB 內，另存一份文件（imgI<序>），進貨紀錄只標記有圖 ----------
+const IMG={},IMG_MAX=180*1024;
+async function loadImg(id){
+  IMG[id]='';
+  if(!db)return;
+  try{const d=await db.doc('layout/imgI'+id).get();IMG[id]=d.exists?d.data().src:'';renderInTable()}catch(e){delete IMG[id]}
+}
+const b64Bytes=s=>Math.ceil((s.length-s.indexOf(',')-1)*3/4);
+async function compressImage(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const im=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>no(new Error('無法讀取這個圖片檔'));i.src=url});
+    let scale=Math.min(1,1280/Math.max(im.naturalWidth,im.naturalHeight));
+    const cv=document.createElement('canvas'),cx=cv.getContext('2d');
+    for(let pass=0;pass<8;pass++){
+      cv.width=Math.max(1,Math.round(im.naturalWidth*scale));cv.height=Math.max(1,Math.round(im.naturalHeight*scale));
+      cx.fillStyle='#fff';cx.fillRect(0,0,cv.width,cv.height);cx.drawImage(im,0,0,cv.width,cv.height);
+      for(let q=0.85;q>=0.45;q-=0.1){const s=cv.toDataURL('image/jpeg',q);if(b64Bytes(s)<=IMG_MAX)return{src:s,bytes:b64Bytes(s),w:cv.width,h:cv.height}}
+      scale*=0.75;
+    }
+    throw new Error('圖片壓縮後仍超過 200KB');
+  }finally{URL.revokeObjectURL(url)}
+}
+let imgTarget=null;
+const imgFile=document.createElement('input');imgFile.type='file';imgFile.accept='image/*';imgFile.id='imgFile';imgFile.hidden=true;document.body.appendChild(imgFile);
+function openImg(id){
+  imgTarget=id;const r=INB.find(x=>x[0]===id),has=(S.inb[id]||{}).img;
+  imgTitle.textContent=`#${id} ${r[1]}（${r[2]}）`;
+  imgView.innerHTML=has?(IMG[id]?`<img src="${IMG[id]}" alt="${esc(r[1])}">`:'<span class="note">載入中…</span>'):'<span class="note">尚未上傳圖片</span>';
+  imgPick.hidden=false;imgPick.textContent=has?'更換圖片':'上傳圖片';imgDel.hidden=!has;imgPick.disabled=imgDel.disabled=!canWrite;
+  imgMsg.className='msg';imgMsg.textContent=has&&(S.inb[id]||{}).imgKB?`${(S.inb[id]).imgKB} KB`:'';
+  imgModal.hidden=false;
+}
+inBody.addEventListener('click',e=>{const b=e.target.closest('[data-img]');if(b)openImg(+b.dataset.img)});
+imgPick.addEventListener('click',()=>{imgFile.value='';imgFile.click()});
+imgFile.addEventListener('change',async()=>{
+  const f=imgFile.files[0];if(!f||imgTarget==null)return;
+  const id=imgTarget;imgMsg.className='msg';imgMsg.textContent='壓縮中…';imgPick.disabled=true;
+  try{
+    const c=await compressImage(f);
+    if(db)await db.doc('layout/imgI'+id).set({src:c.src,at:Date.now()});
+    IMG[id]=c.src;
+    const kb=Math.round(c.bytes/1024);
+    await write('inb',id,Object.assign({qty:0,arrived:''},S.inb[id],{img:true,imgKB:kb,at:Date.now()}));
+    openImg(id);imgMsg.className='msg ok';imgMsg.textContent=`已上傳，壓縮為 ${kb} KB（${c.w}×${c.h}）`;
+  }catch(err){imgMsg.className='msg err';imgMsg.textContent=(err&&err.message)||'上傳失敗，請再試一次。'}
+  imgPick.disabled=!canWrite;
+});
+imgDel.addEventListener('click',async()=>{
+  const id=imgTarget;
+  try{if(db)await db.doc('layout/imgI'+id).delete()}catch(e){}
+  delete IMG[id];
+  const cur=Object.assign({},S.inb[id]);delete cur.img;delete cur.imgKB;cur.at=Date.now();
+  await write('inb',id,cur);openImg(id);
+});
+imgClose.addEventListener('click',()=>{imgModal.hidden=true});
+// 各分頁名稱旁的「圖」按鈕：只在有上傳圖片時出現，點擊後唯讀查看
+function imgBtn(ids){
+  ids=[].concat(ids).filter(id=>id&&(S.inb[id]||{}).img);
+  return ids.length?`<button type="button" class="ibtn" data-view="${ids.join(',')}" title="查看商品圖片" aria-label="查看商品圖片">圖${ids.length>1?ids.length:''}</button>`:'';
+}
+async function viewImgs(ids){
+  imgTarget=null;
+  imgTitle.textContent=ids.length>1?`商品圖片（${ids.length} 張）`:(()=>{const r=INB.find(x=>x[0]===ids[0]);return`#${r[0]} ${r[1]}（${r[2]}）`})();
+  imgPick.hidden=imgDel.hidden=true;imgMsg.textContent='';
+  const draw=()=>{imgView.innerHTML=`<div class="gal">${ids.map(id=>{const r=INB.find(x=>x[0]===id);return`<figure>${IMG[id]?`<img src="${IMG[id]}" alt="${esc(r[1])}">`:'<span class="note">載入中…</span>'}${ids.length>1?`<figcaption>#${id} ${esc(r[2])}</figcaption>`:''}</figure>`}).join('')}</div>`};
+  draw();imgModal.hidden=false;
+  await Promise.all(ids.filter(id=>!IMG[id]).map(async id=>{if(!db)return;try{const d=await db.doc('layout/imgI'+id).get();IMG[id]=d.exists?d.data().src:''}catch(e){}}));
+  if(!imgModal.hidden&&imgTarget==null)draw();
+}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-view]');if(b){e.stopPropagation();viewImgs(b.dataset.view.split(',').map(Number))}},true);
+imgModal.addEventListener('click',e=>{if(e.target===imgModal)imgModal.hidden=true});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!imgModal.hidden)imgModal.hidden=true});
 document.querySelector('.subtabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;document.querySelectorAll('.subtabs button').forEach(x=>x.setAttribute('aria-selected',x===b));sp_cal.hidden=b.dataset.st!=='cal';sp_log.hidden=b.dataset.st!=='log'});
 const sp_cal=document.getElementById('sp-cal'),sp_log=document.getElementById('sp-log');
 ['inQ','inWin','inSt'].forEach(id=>document.getElementById(id).addEventListener('input',renderInTable));
@@ -492,7 +681,7 @@ function renderSchedule(){
     const ds=dr&&dr.start?fromIso(dr.start):null,de=dr&&dr.end?fromIso(dr.end):null;
     let txt=s?`${fmt(s[0])}–${fmt(s[1])}`:'—';
     if(dr&&dr.first)txt=fmt(fromIso(dr.first))+' → 點結束日';else if(dr&&dr.reset)txt='改回自動';else if(ds)txt=`${fmt(ds)}–${fmt(de)}`;
-    h+=`<tr class="${changed||dr&&dr.first?'picking':''}"><td class="sq n">${r[0]}</td><td class="lbl" title="${esc(r[2])}">${esc(r[2].replace(/^[\d,]+元/,''))}</td><td><span class="rng"><span class="date">${txt}</span>${changed?'<span class="pill s-warn">未儲存</span>':man?'<span class="pill s-warn">手動</span>':''}${edit&&man&&!(dr&&dr.reset)?`<button type="button" class="b sm" data-reset="${r[0]}">改回自動</button>`:''}${conflict&&!edit?'<span class="pill s-bad">早於到貨</span>':''}</span></td>
+    h+=`<tr class="${changed||dr&&dr.first?'picking':''}"><td class="sq n">${r[0]}</td><td class="lbl" title="${esc(r[2])}">${imgBtn(INMAP[i])}${esc(r[2].replace(/^[\d,]+元/,''))}</td><td><span class="rng"><span class="date">${txt}</span>${changed?'<span class="pill s-warn">未儲存</span>':man?'<span class="pill s-warn">手動</span>':''}${edit&&man&&!(dr&&dr.reset)?`<button type="button" class="b sm" data-reset="${r[0]}">改回自動</button>`:''}${conflict&&!edit?'<span class="pill s-bad">早於到貨</span>':''}</span></td>
     <td class="n">${num(r[3])}</td>
     <td>${inwTxt(i)}</td>
     <td>${arr?`<span class="pill s-ok">${fmt(arr)}</span>`:INMAP[i]?'<span class="pill s-idle">未到</span>':'—'}</td>
@@ -551,6 +740,7 @@ function renderFloor(){
   const maxQ=Math.max(1,...used.map(id=>S.slots[id].qty));
   flTitle.textContent=`${ids.length} 個板位${L.blocked.length?`・${L.blocked.length} 格停用`:''}`;
   btn3d.setAttribute('aria-pressed',mode3d);btn3d.textContent=mode3d?'平面顯示':'斜二測立體';
+  btnIO.setAttribute('aria-pressed',ioMode);btnIO.textContent=ioMode?'結束進出貨':'進出貨';btnIO.disabled=editMode||!canWrite;plan.classList.toggle('io',ioMode);
   btnEdit.setAttribute('aria-pressed',editMode);btnEdit.textContent=editMode?'完成編輯':'編輯儲位配置';
   editor.hidden=!editMode;
   flKpi.innerHTML=[
@@ -578,12 +768,12 @@ function renderFloor(){
   if(editMode&&!noEd)renderEditor();
   const agg={};Object.entries(S.slots).forEach(([id,s])=>{if(!(s.qty>0))return;(agg[s.item]=agg[s.item]||{q:0,ids:[]});agg[s.item].q+=s.qty;agg[s.item].ids.push(short(id))});
   const rows=Object.entries(agg).sort((a,b)=>(ITEMS[a[0]]||{}).seq>(ITEMS[b[0]]||{}).seq?1:-1);
-  invBody.innerHTML=rows.map(([k,v])=>`<tr><td class="n">${(ITEMS[k]||{seq:''}).seq}</td><td>${esc((ITEMS[k]||{name:k}).name)}</td><td class="n">${num(v.q)}</td><td class="n">${v.ids.length}</td><td style="white-space:normal">${v.ids.sort().join('、')}</td></tr>`).join('')||'<tr><td colspan="5">尚無在庫紀錄。點選圖上的板位，再按「入庫」即可登錄。</td></tr>';
+  invBody.innerHTML=rows.map(([k,v])=>`<tr><td class="n">${(ITEMS[k]||{seq:''}).seq}</td><td>${imgBtn(k[0]==='I'?+k.slice(1):INMAP[+k.slice(1)-1])}${esc((ITEMS[k]||{name:k}).name)}</td><td class="n">${num(v.q)}</td><td class="n">${v.ids.length}</td><td style="white-space:normal">${v.ids.sort().join('、')}</td></tr>`).join('')||'<tr><td colspan="5">尚無在庫紀錄。點選圖上的板位，再按「入庫」即可登錄。</td></tr>';
   renderSelbar();renderLog();
 }
 function renderSelbar(){
   [...sel].forEach(id=>{if(!slotIds().includes(id))sel.delete(id)});
-  selbar.hidden=!sel.size||editMode;
+  selbar.hidden=!ioMode||!sel.size||editMode;
   selTxt.textContent=`已選 ${sel.size} 格：${[...sel].sort().map(short).slice(0,6).join('、')}${sel.size>6?'…':''}`;
   openIn.disabled=openOut.disabled=!canWrite;
 }
@@ -616,7 +806,7 @@ async function saveLayout(){
   return await write1('layout','DD',draft);
 }
 btnEdit.addEventListener('click',async()=>{
-  if(!editMode){if(!canWrite)return;editMode=true;draft=null;sel.clear();edMsg.textContent='';renderFloor();return}
+  if(!editMode){if(!canWrite)return;editMode=true;ioMode=false;draft=null;sel.clear();edMsg.textContent='';renderFloor();return}
   if(await saveLayout()){editMode=false;draft=null;renderFloor()}
 });
 edCancel.addEventListener('click',()=>{editMode=false;draft=null;renderFloor()});
@@ -627,16 +817,53 @@ plan.addEventListener('click',e=>{
     if(S.slots[id]&&S.slots[id].qty>0){edMsg.className='msg err';edMsg.textContent=`${short(id)} 有庫存，不能停用。`;return}
     const i=draft.blocked.indexOf(id);i>=0?draft.blocked.splice(i,1):draft.blocked.push(id);previewDraft();return}
   if(layout().blocked.includes(id))return;
+  if(!ioMode){showSlot(id);return}
   sel.has(id)?sel.delete(id):sel.add(id);
   b.classList.toggle('sel',sel.has(id));b.setAttribute('aria-pressed',sel.has(id));renderSelbar();
 });
 flQ.addEventListener('input',renderFloor);
 selClear.addEventListener('click',()=>{sel.clear();renderFloor()});
+
+// 一般模式點儲位＝查看存放內容；按「進出貨」後才能選取入庫／出庫
+let ioMode=false;
+btnIO.addEventListener('click',()=>{ioMode=!ioMode;sel.clear();renderFloor()});
+function showSlot(id){
+  const s=S.slots[id],it=s&&s.qty>0?ITEMS[s.item]:null;
+  slTitle.textContent='儲位 '+short(id);
+  const pid=it?(s.item[0]==='I'?+s.item.slice(1):INMAP[+s.item.slice(1)-1]):null;
+  const last=S.moves.filter(m=>m.slot===id).slice(0,5);
+  slBody.innerHTML=it?`<dl class="slinfo">
+    <dt>類別</dt><dd><span class="pill ${it.kind===1?'s-idle':'s-ok'}" style="${it.kind===1?'background:var(--accent-soft);color:var(--accent)':''}">${it.kind===1?'未加工':'已加工'}</span></dd>
+    <dt>序號</dt><dd>${it.seq}</dd>
+    <dt>商品</dt><dd>${imgBtn(pid)}${esc(it.name)}</dd>
+    <dt>數量</dt><dd>${num(s.qty)} 件</dd>
+    <dt>更新時間</dt><dd>${s.at?(()=>{const d=new Date(s.at);return fmt(d)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')})():'—'}</dd>
+  </dl>`:'<p class="note">這個板位目前是空的。</p>';
+  if(last.length)slBody.innerHTML+=`<div class="sllog"><b>最近異動</b>${last.map(m=>{const d=new Date(m.ts);return`<span>${fmt(d)} ${m.dir==='in'?'入':'出'} ${num(m.qty)} 件${m.note?'・'+esc(m.note):''}</span>`}).join('')}</div>`;
+  slotModal.hidden=false;
+}
+slClose.addEventListener('click',()=>{slotModal.hidden=true});
+slotModal.addEventListener('click',e=>{if(e.target===slotModal)slotModal.hidden=true});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!slotModal.hidden)slotModal.hidden=true});
 // 出入庫視窗
+
+// 入庫類別：未加工＝進貨商品（I），已加工＝福袋成品（P）
+let mvKindV='raw';
+function fillKindLists(){
+  listRaw.innerHTML=Object.entries(ITEMS).filter(([k])=>k[0]==='I').map(([k,v])=>`<option value="${esc(v.name)}">實收 ${num((S.inb[+k.slice(1)]||{}).qty||0)} 件</option>`).join('');
+  listDone.innerHTML=Object.entries(ITEMS).filter(([k])=>k[0]==='P').map(([k,v])=>`<option value="${esc(v.name)}"></option>`).join('');
+}
+function setKind(v){
+  mvKindV=v;mvRaw.setAttribute('aria-pressed',v==='raw');mvDone.setAttribute('aria-pressed',v==='done');
+  mvItem.setAttribute('list',v==='raw'?'listRaw':'listDone');
+  mvItemTxt.textContent=v==='raw'?'進貨商品（入庫量不可超過實收數）':'加工完成的福袋組合';
+  const k=nameToKey[mvItem.value.trim()];if(k&&(k[0]==='I')!==(v==='raw'))mvItem.value='';
+}
+mvRaw.addEventListener('click',()=>setKind('raw'));mvDone.addEventListener('click',()=>setKind('done'));
 function setDir(d){
   mvDir=d;mvIn.setAttribute('aria-pressed',d==='in');mvOut.setAttribute('aria-pressed',d==='out');
   mvTitle.textContent=`${d==='in'?'入庫':'出庫'}・${sel.size} 格`;
-  mvItemL.hidden=d==='out';mvAllL.hidden=d==='in';mvQtyL.hidden=d==='out'&&mvAll.checked;
+  mvItemL.hidden=mvKind.hidden=d==='out';mvAllL.hidden=d==='in';mvQtyL.hidden=d==='out'&&mvAll.checked;
   mvGo.textContent=d==='in'?'確認入庫':'確認出庫';
 }
 function openModal(d){
@@ -644,6 +871,7 @@ function openModal(d){
   mvSlots.innerHTML=[...sel].sort().map(id=>{const s=S.slots[id];return`<span class="chip">${short(id)}｜${s&&s.qty>0?esc(ITEMS[s.item].seq)+' '+num(s.qty)+' 件':'空'}</span>`}).join('');
   const items=[...new Set([...sel].map(id=>S.slots[id]&&S.slots[id].qty>0?S.slots[id].item:null).filter(Boolean))];
   mvItem.value=items.length===1?ITEMS[items[0]].name:'';
+  fillKindLists();setKind(items.length===1&&items[0][0]==='P'?'done':'raw');
   mvQty.value='';mvNote.value='';mvMsg.textContent='';mvAll.checked=true;
   setDir(d);modal.hidden=false;(d==='in'?mvItem:mvAll).focus();
 }
@@ -662,7 +890,11 @@ mvForm.addEventListener('submit',async e=>{
   const plans=[];
   if(mvDir==='in'){
     const k=nameToKey[mvItem.value.trim()];
-    if(!k)return err('請從清單選擇商品名稱。');
+    if(!k||(k[0]==='I')!==(mvKindV==='raw'))return err(mvKindV==='raw'?'請從清單選擇進貨商品。':'請從清單選擇加工完成的福袋組合。');
+    if(k[0]==='I'&&q>0){
+      const id=+k.slice(1),got=(S.inb[id]||{}).qty||0,stored=Object.values(S.slots).reduce((a,s)=>a+(s.item===k?s.qty:0),0);
+      if(stored+q*ids.length>got)return err(`入庫數量超過進貨驗收的實收數：實收 ${num(got)} 件，已在儲位 ${num(stored)} 件，本次最多還能入庫 ${num(Math.max(0,got-stored))} 件（${ids.length} 格共 ${num(q*ids.length)} 件）。`);
+    }
     if(!(q>0))return err('每格數量需為正整數。');
     const mixed=ids.filter(id=>S.slots[id]&&S.slots[id].qty>0&&S.slots[id].item!==k);
     if(mixed.length)return err(`${mixed.map(short).join('、')} 已放其他品項，不同品項不可放在同一板。`);
@@ -705,9 +937,9 @@ function renderProgress(){
   const all=sumW(0)+sumW(1)+sumW(2);
   const planNow=PROC.reduce((a,r,i)=>a+[0].reduce((b,w)=>b+planTo(i,w,TODAY),0),0);
   pgKpi.innerHTML=[
-    ['總完成組數',num(all),`<div class="bar"><i style="width:${all/tot*100}%;background:var(--ok)"></i></div>${(all/tot*100).toFixed(1)}%（目標 ${num(tot)}）`],
-    ...[0].map(w=>{const t=PROC.reduce((a,r)=>a+r[3+w],0),d=sumW(w);return[WH[w],num(d),`<div class="bar"><i style="width:${d/t*100}%;background:var(--accent)"></i></div>${(d/t*100).toFixed(1)}%（${num(t)}）`]}),
-    ['與排程差距',(all-planNow>=0?'+':'')+num(all-planNow),TODAY<WD[0]?'尚未開始加工':'正數為超前'],
+    ['完成組數',num(all),`目標 ${num(tot)}・尚餘 ${num(tot-all)} 組`],
+    ['完成款式',`${PROC.filter((r,i)=>done(i,0)>=r[3]).length} / ${PROC.length}`,'全部組數加工完成的款式'],
+    ['完成進度',(all/tot*100).toFixed(1)+'%',`<div class="bar"><i style="width:${all/tot*100}%;background:var(--ok)"></i></div>${TODAY<WD[0]?'尚未開始加工':(all-planNow>=0?'超前排程 ':'落後排程 ')+num(Math.abs(all-planNow))+' 組'}`],
   ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
   let h='',cat='',n=0;
   PROC.forEach((r,i)=>{
@@ -716,7 +948,7 @@ function renderProgress(){
     const d=[0].map(w=>Math.min(done(i,w),r[3+w])),sum=d[0]+d[1]+d[2],pct=sum/r[6]*100;
     const pl=[0].reduce((a,w)=>a+planTo(i,w,TODAY),0),gap=sum-pl;
     const st=sum>=r[6]?['已完成','s-ok']:pl===0?['未到排程','s-idle']:gap>=0?['符合進度','s-ok']:gap>-0.15*r[6]?[`落後 ${num(-gap)}`,'s-warn']:[`落後 ${num(-gap)}`,'s-bad'];
-    h+=`<tr><td class="n">${r[0]}</td><td>${esc(r[2])}${r[7]?` <span class="pill s-warn">${esc(r[7])}</span>`:''}</td>${[0].map(w=>`<td class="n"><input class="qty" id="pg${r[0]}-${w}" data-p="${r[0]}" data-w="${w}" type="number" min="0" max="${r[3+w]}" value="${done(i,w)||''}" placeholder="0" ${canWrite?'':'disabled'} aria-label="${WH[w]} ${esc(r[2])} 完成組數"> / ${num(r[3+w])}</td>`).join('')}
+    h+=`<tr><td class="n">${r[0]}</td><td>${imgBtn(INMAP[i])}${esc(r[2])}${r[7]?` <span class="pill s-warn">${esc(r[7])}</span>`:''}</td>${[0].map(w=>`<td class="n"><input class="qty" id="pg${r[0]}-${w}" data-p="${r[0]}" data-w="${w}" type="number" min="0" max="${r[3+w]}" value="${done(i,w)||''}" placeholder="0" ${canWrite?'':'disabled'} aria-label="${WH[w]} ${esc(r[2])} 完成組數"> / ${num(r[3+w])}</td>`).join('')}
     <td><div class="prog"><div class="bar"><i style="width:${pct}%;background:var(--ok)"></i></div><span class="note">${pct.toFixed(0)}%</span></div></td><td><span class="pill ${st[1]}">${st[0]}</span></td></tr>`});
   pgBody.innerHTML=h;pgCnt.textContent=`${n} 個組合`;
 }
@@ -730,7 +962,7 @@ pgBody.addEventListener('change',async e=>{
 
 // ---------- 寫入 ----------
 async function write(col,id,data){
-  S[col][id]=data;emit();
+  S[col][id]=data;if(col==='inb')rebuildINB();emit();
   if(!db)return true;
   try{await db.collection(col).doc(String(id)).set(data);return true}
   catch(e){if(e&&e.code==='invalid_argument'){canWrite=false;banner('你的權限只能檢視，無法登錄資料。');emit()}else banner('儲存失敗，請稍後再試（'+(e&&e.code||'unknown')+'）。');return false}
@@ -767,6 +999,7 @@ async function connectFirestore(){
   const wrapDoc=d=>({id:d.id,exists:d.exists(),data:()=>d.data()});
   const wrapErr=e=>({code:e&&e.code==='permission-denied'?'invalid_argument':'unavailable',message:String(e&&e.message||e)});
   const docRef=(c,id)=>{const r=F.doc(fs,P(c),String(id));return{
+    get:()=>F.getDoc(r).then(wrapDoc).catch(e=>{throw wrapErr(e)}),
     set:d=>F.setDoc(r,d).catch(e=>{throw wrapErr(e)}),
     delete:()=>F.deleteDoc(r).catch(e=>{throw wrapErr(e)}),
     onSnapshot:(next,err)=>F.onSnapshot(r,s=>next(wrapDoc(s)),e=>err&&err(wrapErr(e)))}};
@@ -783,7 +1016,7 @@ async function connectFirestore(){
   try{db=await connectFirestore()}catch(e){setSync('off','離線');banner('無法連線共用資料庫，登錄內容不會保存，請檢查網路後重新整理。');return}
   setSync('on','已連線・即時同步');
   const sub=(col,fn)=>db.collection(col).onSnapshot(s=>{fn(s);emit()},e=>{setSync('off','連線中斷，請重新整理')});
-  sub('inb',s=>{S.inb={};s.docs.forEach(d=>S.inb[d.id]=d.data())});
+  sub('inb',s=>{S.inb={};s.docs.forEach(d=>S.inb[d.id]=d.data());rebuildINB()});
   sub('proc',s=>{S.proc={};s.docs.forEach(d=>S.proc[d.id]=d.data())});
   db.doc('layout/DD').onSnapshot(d=>{if(d.exists&&!editMode){S.layout=d.data();emit()}},()=>{});
   sub('sched',s=>{S.sched={};s.docs.forEach(d=>S.sched[d.id]=d.data())});
