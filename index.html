@@ -1,13 +1,794 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>禮券退貨彙整平台</title>
-<meta http-equiv="refresh" content="0; url=app.html" />
-<script>location.replace("app.html");</script>
-</head>
-<body>
-  <p>正在前往<a href="app.html">禮券退貨彙整平台</a>…</p>
-</body>
-</html>
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>羊年福袋作業台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* 版面：頂部分頁（進貨排程／加工排程／廠域儲位／加工進度），每頁先摘要後明細；廠域以棧板格位平面圖呈現 */
+/* 配色：白底＋藍（主色）、綠（完成／成品）、紅（警示／逾期）；深色模式為黑底。字體：黑體 */
+:root{
+  --bg:#ffffff;--panel:#ffffff;--ink:#14213d;--mute:#5b6b82;--line:#dbe4ef;--sunk:#f1f6fc;
+  --accent:#1f6fd1;--accent-soft:#e3eefc;--gold:#7db4f2;--gold-soft:#e6f1fd;
+  --ok:#1a9a57;--ok-soft:#dff4e8;--warn:#d9480f;--warn-soft:#fdebe1;--bad:#d62f3a;--bad-soft:#fde4e6;--idle:#7a879a;--idle-soft:#edf1f6;
+  --display:"Noto Sans TC","Microsoft JhengHei","PingFang TC","Heiti TC",sans-serif;--body:"Noto Sans TC","Microsoft JhengHei","PingFang TC","Heiti TC",sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#000000;--panel:#0d0f12;--ink:#eef3fa;--mute:#93a1b5;--line:#232a33;--sunk:#151a21;
+  --accent:#4d94ff;--accent-soft:#0f2240;--gold:#2f6db8;--gold-soft:#0f2240;
+  --ok:#3fcf82;--ok-soft:#0f2b1c;--warn:#ff8a4c;--warn-soft:#331a0c;--bad:#ff5c66;--bad-soft:#3a1013;--idle:#93a1b5;--idle-soft:#1a2029;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#000000;--panel:#0d0f12;--ink:#eef3fa;--mute:#93a1b5;--line:#232a33;--sunk:#151a21;
+  --accent:#4d94ff;--accent-soft:#0f2240;--gold:#2f6db8;--gold-soft:#0f2240;
+  --ok:#3fcf82;--ok-soft:#0f2b1c;--warn:#ff8a4c;--warn-soft:#331a0c;--bad:#ff5c66;--bad-soft:#3a1013;--idle:#93a1b5;--idle-soft:#1a2029;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 48px}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{border-bottom:3px solid var(--accent);padding-bottom:12px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px}
+h1{font-family:var(--display);font-weight:900;color:var(--accent);font-size:clamp(22px,4vw,30px);margin:0;text-wrap:balance}
+h1 small{display:block;font-family:var(--body);font-weight:500;font-size:12.5px;color:var(--mute);letter-spacing:.08em}
+.hd-r{display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mute)}
+.hd-r b{font-family:var(--mono);color:var(--accent);font-size:18px}
+.sync{display:inline-flex;align-items:center;gap:6px}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--idle)}
+.sync.on i{background:var(--ok)}.sync.off i{background:var(--bad)}
+nav{display:flex;gap:2px;border-bottom:2px solid var(--accent);overflow-x:auto;scrollbar-width:thin}
+nav button{font:inherit;font-weight:500;background:none;border:0;padding:10px 16px;color:var(--mute);cursor:pointer;white-space:nowrap;border-radius:6px 6px 0 0}
+nav button[aria-selected="true"]{background:var(--accent);color:#fff}
+h2{font-family:var(--display);font-weight:700;font-size:17px;margin:0 0 10px;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+h2 span{font-family:var(--body);font-size:12px;color:var(--mute);font-weight:400}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;min-width:0}
+.stack{display:flex;flex-direction:column;gap:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:11px 14px}
+.kpi .l{font-size:12px;color:var(--mute)}
+.kpi .v{font-family:var(--mono);font-size:22px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--mute)}
+.bar{height:6px;background:var(--idle-soft);border-radius:3px;overflow:hidden;display:flex;margin-top:5px}
+.bar i{display:block;height:100%}
+.pill{display:inline-block;font-size:11.5px;border-radius:999px;padding:1px 9px;white-space:nowrap}
+.s-ok{background:var(--ok-soft);color:var(--ok)}.s-warn{background:var(--warn-soft);color:var(--warn)}
+.s-bad{background:var(--bad-soft);color:var(--bad)}.s-idle{background:var(--idle-soft);color:var(--idle)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+input,select,button.b{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink)}
+button.b{cursor:pointer;background:var(--panel)}
+button.b.p{background:var(--accent);border-color:var(--accent);color:#fff}
+button.b:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cnt{font-size:12px;color:var(--mute);margin-left:auto}
+.tbl{overflow:auto;max-height:560px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 9px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel);font-size:12px;color:var(--mute);font-weight:500;z-index:2}
+td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+tr.grp td{background:var(--sunk);font-weight:700;font-size:12px}
+td input.qty{width:84px;text-align:right;font-family:var(--mono);padding:3px 6px}
+/* 時程格 */
+.cal{overflow-x:auto}
+.cal table{min-width:900px}
+.cal th.d,.cal td.d{padding:0;width:26px;min-width:26px;text-align:center;font-family:var(--mono);font-size:10.5px}
+.cal th.d.we{color:var(--bad)}
+.cal th.d.now{background:var(--accent);color:#fff}
+.cal td.d.on{background:var(--gold)}
+.cal td.d.on.done{background:var(--ok)}
+.cal td.d.proc{background:var(--accent)}
+.cal td.d.proc.bad{background:repeating-linear-gradient(45deg,var(--accent) 0 4px,var(--gold) 4px 8px)}
+.rng{display:inline-flex;align-items:center;gap:4px}
+input.dt{padding:2px 4px;font-family:var(--mono);font-size:12px}
+button.b.sm{padding:1px 8px;font-size:12px}
+.cal td.d.lt{background:var(--sunk)}
+.cal td.lbl{position:sticky;left:0;background:var(--panel);z-index:1;max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin-top:8px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-2px;margin-right:4px}
+/* 平面圖 */
+.wh-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.wh-tabs button{font:inherit;padding:6px 14px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);cursor:pointer}
+.wh-tabs button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.floor-wrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px}
+@media (max-width:900px){.floor-wrap{grid-template-columns:1fr}}
+.floor{overflow-x:auto;background:var(--sunk);border-radius:6px;padding:12px}
+.plan{min-width:760px;display:flex;flex-direction:column;gap:10px}
+.dock{display:flex;gap:6px}
+.dock div{flex:1;border:2px dashed var(--mute);border-radius:4px;text-align:center;font-size:11.5px;color:var(--mute);padding:4px}
+.zones{display:flex;flex-direction:column;gap:8px}
+.zone{display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:center}
+.zone .zn{font-family:var(--display);font-weight:900;color:var(--accent);font-size:18px;text-align:center}
+.bays{display:grid;gap:3px}
+.slot{border:1px solid var(--line);background:var(--panel);border-radius:3px;height:40px;padding:2px 3px;font-size:10px;line-height:1.2;cursor:pointer;overflow:hidden;text-align:left;color:var(--ink);font-family:var(--body)}
+.slot .id{font-family:var(--mono);color:var(--mute);font-size:9.5px;display:block}
+.slot.f1{background:var(--gold-soft);border-color:var(--gold)}
+.slot.f2{background:var(--ok-soft);border-color:var(--ok)}
+.slot.hl{outline:3px solid var(--accent);outline-offset:-1px}
+.slot.sel{background:var(--accent)!important;color:#fff;border-color:var(--accent)}
+.slot.sel .id{color:#fff}
+.areas{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.areas div{border:1px solid var(--line);background:var(--panel);border-radius:4px;padding:6px;font-size:12px;text-align:center;color:var(--mute)}
+.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.form{display:grid;gap:8px}
+.form label{font-size:12px;color:var(--mute);display:grid;gap:3px}
+.seg2{display:flex}.seg2 button{flex:1;font:inherit;padding:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.seg2 button:first-child{border-radius:4px 0 0 4px}.seg2 button:last-child{border-radius:0 4px 4px 0}
+.seg2 button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.msg{font-size:12.5px;min-height:1.4em}
+.msg.err{color:var(--bad)}.msg.ok{color:var(--ok)}
+.log{max-height:260px;overflow:auto;font-size:12px;display:flex;flex-direction:column}
+.log div{padding:5px 0;border-top:1px solid var(--line);display:grid;grid-template-columns:auto 1fr;gap:2px 8px}
+.log .t{font-family:var(--mono);color:var(--mute)}
+.note{font-size:12px;color:var(--mute)}
+.banner{padding:8px 12px;border-radius:4px;background:var(--warn-soft);color:var(--warn);font-size:13px}
+.prog{display:flex;align-items:center;gap:6px;min-width:120px}
+.prog .bar{flex:1;margin:0}
+/* 凍結表頭與左欄 */
+.cal{max-height:70vh;overflow:auto}
+.cal th{top:0;z-index:3}
+.cal th.sq,.cal td.sq{position:sticky;left:0;z-index:2;background:var(--panel);width:40px;min-width:40px}
+.cal th.lbl,.cal td.lbl{position:sticky;left:40px;z-index:2;background:var(--panel);max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.cal th.sq,.cal th.lbl{z-index:4}
+.cal tr.grp td.sq,.cal tr.grp td.lbl{background:var(--sunk)}
+.cal th.d small{display:block;font-size:9px}
+.cal td.pk{cursor:pointer}
+.cal td.pk:hover{outline:2px solid var(--ink);outline-offset:-2px}
+.cal td.d.arr{box-shadow:inset 0 0 0 3px var(--ok)}
+.cal td.d.pstart{background:var(--ink)!important}
+.cal tr.picking td{background-color:var(--accent-soft)}
+.date{font-family:var(--mono);font-size:12.5px}
+input.dt{padding:2px 4px;font-family:var(--mono);font-size:12px}
+/* 平面圖編輯與 3D */
+.editor{display:grid;gap:8px;padding:12px;margin-bottom:10px;border:1px dashed var(--accent);border-radius:6px}
+.editor input[type=number]{width:64px}
+.lab{display:grid;gap:3px;font-size:12px;color:var(--mute)}
+.slot.off{background:repeating-linear-gradient(45deg,var(--sunk) 0 4px,var(--line) 4px 8px);color:var(--mute);cursor:default;text-align:center}
+.plan.editing .slot{cursor:cell}
+.slot b{font-family:var(--mono);font-size:10px}
+.plan{transition:transform .4s ease}
+.plan.three{transform:matrix(1,0,0.354,0.354,0,0);transform-origin:0 0;margin-top:60px;margin-right:240px}
+.plan.three .slot{transition:transform .3s,box-shadow .3s}
+@media (prefers-reduced-motion:reduce){.plan,.plan.three .slot{transition:none}}
+.tools button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* 響應式 */
+@media (max-width:900px){
+  .kpis{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+  .side{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+}
+@media (max-width:640px){
+  body{font-size:13.5px;padding-block:12px 32px}
+  .wrap{gap:12px}
+  header{align-items:flex-start}
+  .hd-r{width:100%;justify-content:space-between;gap:8px}
+  nav button{padding:9px 12px;font-size:13px}
+  .panel{padding:12px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .kpi{padding:9px 10px}.kpi .v{font-size:18px}
+  .tools{gap:6px}.tools input[type=search],.tools select{flex:1 1 140px;min-width:0}
+  .cnt{margin-left:0;width:100%}
+  .cal{max-height:62vh}
+  .cal th.lbl,.cal td.lbl{max-width:120px}
+  .tbl{max-height:62vh}
+  th,td{padding:5px 7px}
+  .floor{padding:8px}
+  .plan{min-width:600px}
+  .plan.three{margin-bottom:-80px}
+  .side{grid-template-columns:1fr}
+}
+
+.floor{overflow:auto}
+.selbar{position:sticky;bottom:env(safe-area-inset-bottom,0px);display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;padding:10px 12px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:6px}
+.selbar span{flex:1 1 200px;font-size:13px;min-width:0}
+.two2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px}
+@media (max-width:900px){.two2{grid-template-columns:1fr}}
+.modal{position:fixed;inset:0;z-index:50;background:rgba(10,20,40,.45);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.dlg{background:var(--panel);color:var(--ink);border-radius:8px;border-top:4px solid var(--accent);padding:18px;width:min(440px,100%);max-height:100%;overflow:auto;display:grid;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.chips{display:flex;flex-wrap:wrap;gap:4px;max-height:96px;overflow:auto}
+.chip{font-family:var(--mono);font-size:11.5px;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+.lab.chk{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:13px}
+button.b.sm.p{background:var(--accent);color:#fff;border-color:var(--accent)}
+.cal td.d.draft{background:var(--accent);opacity:.75}
+
+.subtabs{display:flex;gap:6px;flex-wrap:wrap}
+.subtabs button{font:inherit;padding:7px 18px;border:1px solid var(--accent);border-radius:999px;background:var(--panel);color:var(--accent);cursor:pointer}
+.subtabs button[aria-selected="true"]{background:var(--accent);color:#fff}
+#v-inbound th,#v-inbound td{text-align:center}
+#v-inbound td input.qty{text-align:center}
+#v-inbound .cal td.lbl{text-align:left}
+h2.one{flex-wrap:nowrap;min-width:0}
+h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cal td .rng{white-space:nowrap}
+
+.phead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:8px 12px;margin-bottom:10px}
+.phead h2{margin:0;min-width:0;flex:1 1 260px}
+.pact{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+#v-inbound input.qty{-moz-appearance:textfield;appearance:textfield}
+#v-inbound input.qty::-webkit-outer-spin-button,#v-inbound input.qty::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.navrow{display:flex;align-items:flex-end;gap:8px;border-bottom:2px solid var(--accent)}
+.navrow nav{flex:1;min-width:0;border-bottom:0}
+.navrow #themeBtn{flex:none;margin-bottom:6px}
+</style>
+
+<div class="wrap">
+<span hidden><b id="cd"></b><span class="sync" id="sync"><i></i><span></span></span></span>
+<div class="banner" id="banner" hidden></div>
+
+<div class="navrow">
+<nav role="tablist">
+  <button role="tab" data-v="inbound" id="t-inbound">商品進貨排程</button>
+  <button role="tab" data-v="schedule" id="t-schedule">加工排程</button>
+  <button role="tab" data-v="floor" id="t-floor">廠域儲位</button>
+  <button role="tab" data-v="progress" id="t-progress">加工展開進度</button>
+</nav>
+<button type="button" class="b" id="themeBtn" aria-pressed="false">深色模式</button>
+</div>
+
+<!-- 進貨排程 -->
+<section id="v-inbound" class="stack">
+  <div class="kpis" id="inKpi"></div>
+  <div class="subtabs" role="tablist">
+    <button type="button" role="tab" id="st-cal" data-st="cal" aria-selected="true">進倉日程</button>
+    <button type="button" role="tab" id="st-log" data-st="log" aria-selected="false">進貨驗收登錄</button>
+  </div>
+  <div class="panel" id="sp-cal">
+    <h2>進倉日程<span>依預計進倉日（可在驗收登錄頁修改）；大肚應進量依三倉加工比例估算</span></h2>
+    <div class="cal" id="inCal"></div>
+    <div class="legend"><span><i style="background:var(--gold)"></i>預計進倉</span><span><i style="background:var(--ok)"></i>已到齊</span><span><i style="background:var(--accent)"></i>今日</span></div>
+  </div>
+  <div class="panel" id="sp-log" hidden>
+    <h2>進貨驗收登錄<span>預計進倉日、實收數量、實際到貨日皆可修改，會同步到加工排程</span></h2>
+    <div class="tools">
+      <input id="inQ" type="search" placeholder="搜尋款式或 IP…">
+      <select id="inWin"><option value="">全部進倉時段</option></select>
+      <select id="inSt"><option value="">全部狀態</option><option>未到</option><option>部分到貨</option><option>已到齊</option><option>逾期未到</option></select>
+      <span class="cnt" id="inCnt"></span>
+    </div>
+    <div class="tbl"><table><thead><tr><th class="n">序</th><th>款式</th><th>IP</th><th class="n">大肚應進量</th><th>外箱</th><th class="n">箱入</th><th class="n">箱數</th><th>預計進倉日</th><th class="n">實收</th><th>實際到貨日</th><th>狀態</th></tr></thead><tbody id="inBody"></tbody></table></div>
+  </div>
+</section>
+
+<!-- 加工排程 -->
+<section id="v-schedule" class="stack" hidden>
+  <div class="kpis" id="scKpi"></div>
+  <div class="panel">
+    <div class="phead">
+      <h2 class="one">加工排程<span>淺藍＝預計進貨、綠框＝實際到貨</span></h2>
+      <div class="pact"><span class="note" id="scHint"></span><button type="button" class="b p" id="scEdit">編輯</button><button type="button" class="b" id="scCancel" hidden>取消</button><button type="button" class="b p" id="scSave" hidden>儲存</button></div>
+    </div>
+    <div class="cal" id="scCal"></div>
+    <div class="legend"><span><i style="background:var(--gold)"></i>預計進貨</span><span><i style="background:var(--panel);box-shadow:inset 0 0 0 3px var(--ok)"></i>實際到貨</span><span><i style="background:var(--accent)"></i>加工作業</span><span><i style="background:repeating-linear-gradient(45deg,var(--accent) 0 3px,var(--gold) 3px 6px)"></i>加工早於進貨完成</span></div>
+  </div>
+</section>
+
+<!-- 廠域儲位 -->
+<section id="v-floor" class="stack" hidden>
+  <div class="kpis" id="flKpi"></div>
+  <div class="panel">
+    <div class="tools">
+      <input id="flQ" type="search" placeholder="找商品所在儲位…" list="itemList">
+      <button type="button" class="b" id="btn3d" aria-pressed="false">斜二測立體</button>
+      <button type="button" class="b" id="btnEdit" aria-pressed="false">編輯儲位配置</button>
+      <span class="cnt" id="flTitle"></span>
+    </div>
+    <div class="editor" id="editor" hidden>
+      <p class="note">調整區域名稱（英數）、排數與每排板位；點圖上的格子可停用（柱位、走道），再點一次恢復。按「完成編輯」儲存。</p>
+      <div class="tbl" style="max-height:none"><table><thead><tr><th>區域</th><th>排數</th><th>每排板位</th><th></th></tr></thead><tbody id="edZones"></tbody></table></div>
+      <div class="tools"><button type="button" class="b" id="edAdd">新增區域</button><button type="button" class="b" id="edReset">恢復預設</button></div>
+      <label class="lab">碼頭（以「、」分隔）<input id="edDocks"></label>
+      <label class="lab">作業區（以「、」分隔）<input id="edAreas"></label>
+      <div class="tools"><button type="button" class="b" id="edCancel">取消</button><span class="msg" id="edMsg"></span></div>
+    </div>
+    <div class="floor"><div class="plan" id="plan"></div></div>
+    <div class="legend"><span><i style="background:var(--panel);border:1px solid var(--line)"></i>空板位</span><span><i style="background:var(--gold-soft);border:1px solid var(--gold)"></i>原物料</span><span><i style="background:var(--ok-soft);border:1px solid var(--ok)"></i>福袋成品</span><span><i style="background:var(--accent);"></i>已選取</span><span>點格子選取（可複選），再按入庫或出庫；同一板不可混放不同品項</span></div>
+    <div class="selbar" id="selbar" hidden>
+      <span id="selTxt"></span>
+      <button type="button" class="b p" id="openIn">入庫</button>
+      <button type="button" class="b" id="openOut">出庫</button>
+      <button type="button" class="b" id="selClear">清除選取</button>
+    </div>
+  </div>
+  <div class="two2">
+    <div class="panel">
+      <h2>庫存彙總</h2>
+      <div class="tbl" style="max-height:340px"><table><thead><tr><th class="n">序</th><th>商品</th><th class="n">庫存件數</th><th class="n">板位數</th><th>儲位</th></tr></thead><tbody id="invBody"></tbody></table></div>
+    </div>
+    <div class="panel"><h2>最近異動</h2><div class="log" id="log"></div></div>
+  </div>
+  <datalist id="itemList"></datalist>
+</section>
+
+<div class="modal" id="modal" hidden>
+  <form class="dlg" id="mvForm" role="dialog" aria-modal="true" aria-labelledby="mvTitle">
+    <h2 id="mvTitle">入庫</h2>
+    <div class="chips" id="mvSlots"></div>
+    <div class="seg2"><button type="button" id="mvIn" aria-pressed="true">入庫</button><button type="button" id="mvOut" aria-pressed="false">出庫</button></div>
+    <label class="lab" id="mvItemL">商品（所有選取板位放同一品項）<input id="mvItem" list="itemList" placeholder="輸入序號或款式名稱選取" autocomplete="off"></label>
+    <label class="lab chk" id="mvAllL"><input type="checkbox" id="mvAll" checked> 整板出清（每格全部出庫）</label>
+    <label class="lab" id="mvQtyL">每格數量（件）<input id="mvQty" type="number" min="1" step="1" inputmode="numeric"></label>
+    <label class="lab">備註<input id="mvNote" placeholder="例：第 2 車、轉加工區"></label>
+    <div class="msg" id="mvMsg"></div>
+    <div class="tools" style="justify-content:flex-end;margin:0"><button type="button" class="b" id="mvCancel">取消</button><button class="b p" type="submit" id="mvGo">確認登錄</button></div>
+  </form>
+</div>
+
+<!-- 加工進度 -->
+<section id="v-progress" class="stack" hidden>
+  <div class="kpis" id="pgKpi"></div>
+  <div class="panel">
+    <h2>加工展開進度<span>各倉每日回報完成組數；與建議排程比較落後或超前</span></h2>
+    <div class="tools"><input id="pgQ" type="search" placeholder="搜尋組合…"><span class="cnt" id="pgCnt"></span></div>
+    <div class="tbl"><table><thead><tr><th class="n">序</th><th>組合名稱</th><th class="n">完成/目標</th><th>總進度</th><th>對照排程</th></tr></thead><tbody id="pgBody"></tbody></table></div>
+  </div>
+</section>
+
+<p class="note">資料來源：★羊年福袋商品資訊 1.xlsx（入倉明細 時程、三倉加工明細、各倉損益）。大肚倉委外小楓葉物流，加工 10.5 元/袋。大肚應進量＝全區進倉量×大肚加工占比（約 26%），實際以廠商分倉單為準。加工時段預設依進倉日推算（檔案未提供逐款加工日），手動修改後即共用保存。</p>
+</div>
+
+<script>
+const INB=[[1, "絨毛口袋拼接包", "三麗鷗", 4000, "54*35*40", 60, 67, "11/20-11/25"], [2, "絨毛口袋拼接包", "PINGU", 5000, "54*35*40", 60, 84, "11/20-11/25"], [3, "絨毛口袋拼接包", "牙寶", 5500, "54*35*40", 60, 92, "11/20-11/25"], [4, "絨毛口袋拼接包", "順順", 4000, "54*35*40", 60, 67, "11/20-11/25"], [5, "二合一PVC絨毛包", "迪士尼", 4000, "45*38*53", 30, 134, "11/20-11/25"], [6, "二合一PVC絨毛包", "順順", 4000, "45*38*53", 30, 134, "11/20-11/25"], [7, "大容量菱格紋鋪棉包", "三麗鷗", 4000, "57*39*50 ", 25, 160, "11/26-11/30"], [8, "大容量菱格紋鋪棉包", "迪士尼", 4000, "57*39*50 ", 25, 160, "11/26-11/30"], [9, "大容量菱格紋鋪棉包", "PINGU", 4000, "57*39*50 ", 25, 160, "11/26-11/30"], [10, "大容量菱格紋鋪棉包", "牙寶", 5000, "57*39*50 ", 25, 200, "11/26-11/30"], [11, "大容量菱格紋鋪棉包", "順順", 4000, "57*39*50 ", 25, 160, "11/26-11/30"], [12, "大容量菱格紋鋪棉包", "寶可夢", 5000, "57*39*50 ", 25, 200, "11/26-11/30"], [13, "角色開窗包", "三麗鷗", 4000, "確認中", null, null, "11/26-11/30"], [14, "角色開窗包", "迪士尼", 4000, "確認中", null, null, "11/26-11/30"], [15, "角色開窗包", "牙寶", 4500, "44 * 7.5 * 40.6 ", 28, 161, "11/20-11/25"], [16, "獨特造型包", "彈簧狗", 4000, "確認中", null, null, "12/11-12/15"], [17, "獨特造型包", "牙寶", 4000, "75*36*40", 24, 167, "11/27-12/1"], [18, "絨毛套存錢筒", "三麗鷗", 4000, "確認中", null, null, "11/30-12/3"], [19, "絨毛套存錢筒", "PINGU", 4000, "確認中", null, null, "11/30-12/3"], [20, "絨毛收納屋", "PINGU", 3000, "68*60*52", 8, 375, "11/18-11/20"], [21, "絨毛收納屋", "牙寶", 4500, "68*60*52", 8, 563, "11/18-11/20"], [22, "造型抱枕", "三麗鷗", 4000, "66*40*40", 6, 667, "11/27-12/1"], [23, "造型抱枕", "迪士尼", 4000, "66*36*39", 6, 667, "11/27-12/1"], [24, "造型抱枕", "寶可夢", 5000, "72*40*40", 6, 834, "11/27-12/1"], [25, "造型抱枕", "牙寶", 4000, "確認中", null, null, "12/4-12/9"], [26, "開窗摺疊手推車", "迪士尼", 3000, "50*38.5*48.5", 4, 750, "11/20-11/25"], [27, "開窗摺疊手推車", "PINGU", 3000, "50*38.5*48.5", 4, 750, "11/20-11/25"], [28, "開窗摺疊手推車", "順順", 3000, "50*38.5*48.5", 4, 750, "12/3-12/7"], [29, "開窗摺疊手推車", "寶可夢", 3000, "50*38.5*48.5", 4, 750, "12/3-12/7"], [30, "18吋子母行李箱", "三麗鷗", 3000, "44*46*23", 1, 3000, "11/25-11/27"], [31, "18吋子母行李箱", "寶可夢", 3000, "44*46*23", 1, 3000, "12/1-12/4"], [32, "28吋分層行李箱", "三麗鷗-PC", 2000, "50.5*29.8*80", 1, 2000, "11/23-11/25"], [33, "28吋分層行李箱", "三麗鷗-MM", 2000, "50.5*29.8*80", 1, 2000, "11/23-11/25"], [34, "28吋分層行李箱", "寶可夢", 3000, "50.5*29.8*80", 1, 3000, "12/7-12/9"], [35, "NICONICO樂享料理鍋", "迪士尼", 3000, "69.5*47*41", 12, 250, "12/10-12/11"], [36, "NICONICO樂享料理鍋", "寶可夢", 3000, "69.5*47*41", 12, 250, "12/10-12/11"], [37, "NICONICO3L多功能料理鍋", "三麗鷗", 4000, "52*31.5*63.5", 6, 667, "12/10-12/11"], [38, "NICONICO3L多功能料理鍋", "迪士尼", 2000, "52*31.5*63.5", 6, 334, "12/10-12/11"], [39, "NICONICO即享料理鍋 ", "寶可夢", 3000, "56*44.6*43.5", 6, 500, "12/10-12/11"], [40, "摺疊傘", "美樂蒂", 4000, "28*24*36", 40, 100, "11/18-11/20"], [41, "摺疊傘", "PINGU", 5000, "28*24*36", 40, 125, "11/18-11/20"], [42, "摺疊傘", "牙寶", 5500, "28*24*36", 40, 138, "11/18-11/20"], [43, "摺疊傘", "順順-A", 4000, "28*24*36", 40, 100, "11/18-11/20"], [44, "摺疊傘", "順順-B", 4000, "28*24*36", 40, 100, "11/18-11/20"], [45, "冷水壺", "雙星仙子", 4000, "56*42*21", 48, 84, "11/20-11/25"], [46, "冷水壺", "怪電", 4000, "56*42*21", 48, 84, "11/20-11/25"], [47, "冷水壺", "PINGU", 4000, "56*42*21", 48, 84, "11/20-11/25"], [48, "冷水壺", "牙寶", 5000, "56*42*21", 48, 105, "11/20-11/25"], [49, "冷水壺", "順順", 4000, "56*42*21", 48, 84, "11/20-11/25"], [50, "冷水壺", "皮卡丘", 5000, "56*42*21", 48, 105, "11/20-11/25"], [51, "不鏽鋼吸管杯", "花小兔", 4000, "48.6*21.6*27", 20, 200, "11/20-11/25"], [52, "不鏽鋼吸管杯", "毛怪", 4000, "48.6*21.6*27", 20, 200, "11/20-11/25"], [53, "不鏽鋼吸管杯", "彈簧狗", 4000, "48.6*21.6*27", 20, 200, "11/20-11/25"], [54, "不鏽鋼吸管杯", "牙寶", 4500, "48.6*21.6*27", 20, 225, "11/20-11/25"], [55, "不鏽鋼吸管杯", "牙寶", 4000, "48.6*21.6*27", 20, 200, "11/20-11/25"], [56, "大臉保冷袋", "布丁狗", 4000, "確認中", null, null, "11/30-12/3"], [57, "大臉保冷袋", "PINGU", 4000, "確認中", null, null, "11/30-12/3"], [58, "摺疊收納籃", "漢頓", 4000, "40*30*28", 20, 200, "11/20-11/25"], [59, "摺疊收納籃", "迪士尼", 4000, "40*30*28", 20, 200, "11/20-11/25"], [60, "摺疊收納籃", "PINGU", 3000, "40*30*28", 20, 150, "11/20-11/25"], [61, "摺疊收納籃", "牙寶", 4000, "40*30*28", 20, 200, "11/20-11/25"], [62, "摺疊收納籃", "牙寶", 4500, "40*30*28", 20, 225, "11/20-11/25"], [63, "輕巧購物車", "三眼怪", 3000, "34*34*38", 20, 150, "11/20-11/25"], [64, "輕巧購物車", "PINGU", 3000, "34*34*38", 20, 150, "11/20-11/25"], [65, "輕巧購物車", "順順", 3000, "34*34*38", 20, 150, "12/4-12/9"], [66, "輕巧購物車", "百變怪", 3000, "34*34*38", 20, 150, "12/4-12/9"], [67, "行李箱套", "帕恰狗", 2000, "確認中", null, null, "11/20-11/25"], [68, "行李箱套", "彼安諾", 2000, "確認中", null, null, "11/20-11/25"], [69, "行李箱套", "皮卡丘", 3000, "確認中", null, null, "12/1-12/7"], [70, "小物盒", "美樂蒂", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [71, "小物盒", "雙星仙子", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [72, "小物盒", "花小兔", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [73, "小物盒", "布丁狗(彼)", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [74, "小物盒", "牧羊女", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [75, "小物盒", "怪獸電力", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [76, "小物盒", "毛怪", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [77, "小物盒", "彈簧狗", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [78, "小物盒", "PINGU-A\n黃", 5000, "54*13*49.5", 25, 200, "11/25-11/30"], [79, "小物盒", "PINGU-B藍", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [80, "小物盒", "PINGU-C橘", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [81, "小物盒", "牙寶-A紅", 5500, "54*13*49.5", 25, 220, "11/25-11/30"], [82, "小物盒", "牙寶-B藍", 5000, "54*13*49.5", 25, 200, "11/25-11/30"], [83, "小物盒", "牙寶-C深藍", 4500, "54*13*49.5", 25, 180, "11/25-11/30"], [84, "小物盒", "牙寶-D橘", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [85, "小物盒", "順順-A綠", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [86, "小物盒", "順順-B藍", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [87, "小物盒", "順順-C紅", 4000, "54*13*49.5", 25, 160, "11/25-11/30"], [88, "小物盒", "皮卡丘", 5000, "54*13*49.5", 25, 200, "11/25-11/30"], [89, "紅包袋2入組", "美樂蒂紅包袋", 4000, "25*35*35", null, null, "待確認"], [90, "紅包袋2入組", "雙星仙子紅包袋", 4000, "25*35*35", null, null, "待確認"], [91, "紅包袋2入組", "花小兔紅包袋", 4000, "25*35*35", null, null, "待確認"], [92, "紅包袋2入組", "布丁狗紅包袋", 7000, "25*35*35", null, null, "待確認"], [93, "紅包袋2入組", "帕恰狗紅包袋", 2000, "25*35*35", null, null, "待確認"], [94, "紅包袋2入組", "帕恰狗(彼安諾)紅包袋", 2000, "25*35*35", null, null, "待確認"], [95, "紅包袋2入組", "漢頓紅包袋", 4000, "25*35*35", null, null, "待確認"], [96, "紅包袋2入組", "彼安諾與美樂蒂紅包袋", 2000, "25*35*35", null, null, "待確認"], [97, "紅包袋2入組", "牧羊女紅包袋", 4000, "25*35*35", null, null, "待確認"], [98, "紅包袋2入組", "怪獸電力公司紅包袋-A款", 4000, "25*35*35", null, null, "待確認"], [99, "紅包袋2入組", "怪獸電力公司紅包袋-B款", 4000, "25*35*35", null, null, "待確認"], [100, "紅包袋2入組", "彈簧狗紅包袋", 4000, "25*35*35", null, null, "待確認"], [101, "紅包袋2入組", "玩具總動員紅包袋", 7000, "25*35*35", null, null, "待確認"], [102, "紅包袋2入組", "三眼怪紅包袋", 3000, "25*35*35", null, null, "待確認"], [103, "紅包袋2入組", "PINGU紅包袋-A款", 8000, "25*35*35", null, null, "待確認"], [104, "紅包袋2入組", "PINGU紅包袋-B款", 7000, "25*35*35", null, null, "待確認"], [105, "紅包袋2入組", "PINGU紅包袋-C款", 4000, "25*35*35", null, null, "待確認"], [106, "紅包袋2入組", "牙寶紅包袋-A款", 5500, "25*35*35", null, null, "待確認"], [107, "紅包袋2入組", "牙寶紅包袋-B款", 5000, "25*35*35", null, null, "待確認"], [108, "紅包袋2入組", "牙寶紅包袋-C款", 4500, "25*35*35", null, null, "待確認"], [109, "紅包袋2入組", "牙寶紅包袋-D款", 4000, "25*35*35", null, null, "待確認"], [110, "紅包袋2入組", "牙寶紅包袋-E款", 4000, "25*35*35", null, null, "待確認"], [111, "紅包袋2入組", "牙寶紅包袋-F款", 4500, "25*35*35", null, null, "待確認"], [112, "紅包袋2入組", "PUPPET SUNSUN紅包袋", 15000, "25*35*35", null, null, "待確認"], [113, "紅包袋2入組", "皮卡丘紅包袋", 14000, "25*35*35", null, null, "待確認"], [114, "紅包袋2入組", "小火龍紅包袋", 5000, "25*35*35", null, null, "待確認"], [115, "紅包袋2入組", "百變怪紅包袋", 3000, "25*35*35", null, null, "待確認"], [116, "紅包袋2入組", "可達鴨紅包袋", 3000, "25*35*35", null, null, "待確認"]];
+const PROC=[[1, "絨毛口袋拼接包", "499元絨毛口袋拼接包(美樂蒂)", 2070, 1039, 855, 3964, ""], [2, "絨毛口袋拼接包", "499元絨毛口袋拼接包(PINGU)", 2522, 1297, 1031, 4850, ""], [3, "絨毛口袋拼接包", "499元絨毛口袋拼接包(牙寶)", 2858, 1427, 1177, 5462, ""], [4, "絨毛口袋拼接包", "499元絨毛口袋拼接包(順順)", 1991, 1038, 855, 3884, ""], [5, "二合一PVC絨毛包", "499元二合一PVC絨毛包(牡羊女+三羊)", 1995, 1030, 855, 3880, ""], [6, "二合一PVC絨毛包", "499元二合一PVC絨毛包(順順)", 1986, 1038, 855, 3879, ""], [7, "大容量绗縫包", "699元大容量绗縫包(雙子星仙子)", 1986, 1026, 856, 3868, ""], [8, "大容量绗縫包", "699元大容量绗縫包(怪獸電力公司)", 2037, 1039, 856, 3932, ""], [9, "大容量绗縫包", "699元大容量绗縫包(PINGU)", 2046, 1039, 856, 3941, ""], [10, "大容量绗縫包", "699元大容量绗縫包(牙寶)", 2584, 1295, 1070, 4949, ""], [11, "大容量绗縫包", "699元大容量绗縫包(順順)", 1965, 1024, 856, 3845, ""], [12, "大容量绗縫包", "699元大容量绗縫包(寶可夢)", 2563, 1296, 1070, 4929, ""], [13, "角色開窗口袋包", "699元角色開窗口袋包(花小兔)", 1970, 1026, 856, 3852, ""], [14, "角色開窗口袋包", "699元角色開窗口袋包(毛怪)", 2054, 1050, 856, 3960, ""], [15, "角色開窗口袋包", "699元角色開窗口袋包(牙寶)", 2445, 1168, 963, 4576, ""], [16, "獨特造型包", "699元獨特造型包(彈簧狗)", 2002, 1017, 856, 3875, "預計12/10-12/12進倉"], [17, "獨特造型包", "699元獨特造型包(牙寶)", 2228, 1037, 856, 4121, ""], [18, "變裝存錢筒", "799元變裝存錢筒(布丁狗(彼安諾))", 1994, 1034, 856, 3884, ""], [19, "變裝存錢筒", "799元變裝存錢筒(PINGU)", 2004, 1036, 856, 3896, ""], [20, "造型抱枕毯", "799元造型抱枕毯(漢頓)", 2009, 1035, 856, 3900, ""], [21, "造型抱枕毯", "799元造型抱枕毯(莉莉板)", 1972, 1019, 856, 3847, ""], [22, "造型抱枕毯", "799元造型抱枕毯(牙寶)", 2151, 1039, 856, 4046, ""], [23, "造型抱枕毯", "799元造型抱枕毯(小火龍)", 2449, 1272, 1070, 4791, ""], [24, "絨毛收納屋", "999元絨毛收納屋(牙寶)", 2270, 1154, 963, 4387, ""], [25, "絨毛收納屋", "999元絨毛收納屋(PINGU)", 1538, 784, 639, 2961, ""], [26, "開窗摺疊手推車", "1,299元開窗摺疊手推車(三眼怪)", 1522, 784, 639, 2945, ""], [27, "開窗摺疊手推車", "1,299元開窗摺疊手推車(PINGU)", 1532, 781, 639, 2952, ""], [28, "開窗摺疊手推車", "1,299元開窗摺疊手推車(順順)", 1474, 764, 639, 2877, ""], [29, "開窗摺疊手推車", "1,299元開窗摺疊手推車(寶可夢)", 1594, 792, 639, 3025, ""], [30, "18吋行李箱", "1,299元子母行李箱(18+12吋)(布丁狗(彼安諾))", 1485, 751, 639, 2875, ""], [31, "18吋行李箱", "1,299元子母行李箱(18+12吋)(寶可夢)", 1544, 764, 639, 2947, ""], [32, "NICONICO 1.2L陶瓷料理鍋", "1,299元NICONICO 1.2L陶瓷料理鍋(迪士尼)", 1336, 710, 639, 2685, "預計12月中進倉"], [33, "NICONICO 1.2L陶瓷料理鍋", "1,299元NICONICO 1.2L陶瓷料理鍋(寶可夢)", 1354, 719, 639, 2712, ""], [34, "NICONICO 3L多功能料理鍋", "1,299元NICONICO 3L多功能料理鍋(帕恰狗)", 943, 493, 428, 1864, ""], [35, "NICONICO 3L多功能料理鍋", "1,299元NICONICO 3L多功能料理鍋(美樂蒂)", 940, 498, 428, 1866, ""], [36, "NICONICO 3L多功能料理鍋", "1,299元NICONICO 3L多功能料理鍋(迪士尼)", 942, 498, 428, 1868, ""], [37, "28吋分層前開行李箱", "1,899元28吋分層前開行李箱(帕洽狗(彼安諾))", 1099, 521, 428, 2048, ""], [38, "28吋分層前開行李箱", "1,899元28吋分層前開行李箱(美樂蒂(彼安諾))", 1115, 523, 427, 2065, ""], [39, "28吋分層前開行李箱", "1,899元28吋分層前開行李箱(寶可夢)", 1566, 753, 639, 2958, ""], [40, "NICONICO即享料理鍋", "1,899元NICONICO即享料理鍋(寶可夢)", 1371, 710, 639, 2720, ""], [41, "門市造型便當袋", "499元全家鮮食福袋", 2574, 1283, 1072, 4929, ""]];
+
+const Y=2026,OPEN=new Date(2027,0,6);
+const TODAY=(()=>{const d=new Date();d.setHours(0,0,0,0);return d})();
+const D=(m,d)=>new Date(m>=10?Y:Y+1,m-1,d);
+const pd=s=>{const [m,d]=s.split('/').map(Number);return D(m,d)};
+const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
+const key=d=>`${d.getMonth()+1}-${d.getDate()}`;
+const num=n=>n==null||isNaN(n)?'—':Math.round(n).toLocaleString('zh-TW');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const days=(a,b)=>{const r=[];for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1))r.push(new Date(d));return r};
+const WH=['大肚倉'],WHK=['DD'];
+// 主題：預設白底，可切換深色
+let theme='light';try{theme=localStorage.getItem('fb27-theme')||'light'}catch(e){}
+function applyTheme(){document.documentElement.dataset.theme=theme;themeBtn.textContent=theme==='dark'?'淺色模式':'深色模式';themeBtn.setAttribute('aria-pressed',theme==='dark')}
+themeBtn.addEventListener('click',()=>{theme=theme==='dark'?'light':'dark';try{localStorage.setItem('fb27-theme',theme)}catch(e){}applyTheme()});
+applyTheme();
+// 只保留大肚倉：加工目標取大肚欄；進倉量依大肚占三倉加工比例估算
+const DD_RATIO=PROC.reduce((a,r)=>a+r[4],0)/PROC.reduce((a,r)=>a+r[6],0);
+PROC.forEach(r=>{r[3]=r[4];r[6]=r[4]});
+INB.forEach(r=>{r[3]=Math.ceil(r[3]*DD_RATIO);if(r[5])r[6]=Math.ceil(r[3]/r[5])});
+document.getElementById('cd').textContent=Math.max(0,Math.round((OPEN-TODAY)/864e5))+' 天';
+
+// ---------- 共用資料 ----------
+const S={inb:{},proc:{},slots:{},sched:{},moves:[],layout:null};
+let db=null,user=null,canWrite=true;
+const listeners=new Set();const emit=()=>listeners.forEach(f=>f());
+const sync=document.getElementById('sync');
+function setSync(cls,txt){sync.className='sync '+cls;sync.lastElementChild.textContent=txt}
+function banner(t){const b=document.getElementById('banner');b.textContent=t;b.hidden=!t}
+
+// ---------- 進貨 ----------
+INB.forEach(r=>{const m=/^(\d+)\/(\d+)-(\d+)\/(\d+)$/.exec(r[7]);r.win0=m?[D(+m[1],+m[2]),D(+m[3],+m[4])]:null});
+const isoD=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const isoP=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+// 預計進倉時段：手動修改值優先，否則用檔案值
+const winOf=r=>{const o=S.inb[r[0]];return o&&o.ws&&o.we?[isoP(o.ws),isoP(o.we)]:r.win0};
+const winTxt=r=>{const w=winOf(r);return w?`${fmt(w[0])}-${fmt(w[1])}`:r[7]};
+function inState(r){
+  const got=(S.inb[r[0]]||{}).qty||0;
+  if(got>=r[3])return['已到齊','s-ok'];
+  if(got>0)return['部分到貨','s-warn'];
+  const w=winOf(r);if(w&&TODAY>w[1])return['逾期未到','s-bad'];
+  return['未到','s-idle'];
+}
+let wins=[];
+function fillWins(){const v=inWin.value;wins=[...new Set(INB.map(winTxt))];inWin.innerHTML='<option value="">全部進倉時段</option>'+wins.map(w=>`<option${w===v?' selected':''}>${esc(w)}</option>`).join('')}
+fillWins();
+function renderInbound(){
+  fillWins();
+  const tot=INB.reduce((a,r)=>a+r[3],0),got=INB.reduce((a,r)=>a+Math.min((S.inb[r[0]]||{}).qty||0,r[3]),0);
+  const st=INB.map(inState);const c=k=>st.filter(s=>s[0]===k).length;
+  const tbd=INB.filter(r=>!r[5]).length;
+  document.getElementById('inKpi').innerHTML=[
+    ['進倉總件數',num(tot),`${INB.length} 個品項・${wins.length} 個進倉時段`],
+    ['實收件數',num(got),`<div class="bar"><i style="width:${got/tot*100}%;background:var(--ok)"></i></div>${(got/tot*100).toFixed(1)}%`],
+    ['已到齊／部分',`${c('已到齊')} / ${c('部分到貨')}`,`未到 ${c('未到')} 項`],
+    ['逾期未到',c('逾期未到'),'超過預計進倉迄日'],
+    ['箱規確認中',tbd,'外箱尺寸／箱入數未定'],
+  ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
+  // 日程：依款式分組
+  const ds=days(D(11,16),D(12,16));
+  const cats=[...new Set(INB.map(r=>r[1]))];
+  let h=`<table><thead><tr><th>款式</th><th class="n">品項</th>${ds.map(d=>`<th class="d ${d.getDay()===0?'we':''} ${+d===+TODAY?'now':''}">${d.getDate()}</th>`).join('')}</tr></thead><tbody>`;
+  h+=`<tr class="grp"><td>11 月 → 12 月</td><td></td>${ds.map(d=>`<td class="d">${d.getDate()===16||d.getDate()===1?(d.getMonth()+1)+'月':''}</td>`).join('')}</tr>`;
+  cats.forEach(cat=>{
+    const rs=INB.filter(r=>r[1]===cat);const done=rs.every(r=>inState(r)[0]==='已到齊');
+    h+=`<tr><td class="lbl" title="${esc(cat)}">${esc(cat)}</td><td class="n">${rs.length}</td>${ds.map(d=>{const on=rs.some(r=>{const w=winOf(r);return w&&d>=w[0]&&d<=w[1]});return`<td class="d ${on?'on':''} ${on&&done?'done':''}"></td>`}).join('')}</tr>`;
+  });
+  document.getElementById('inCal').innerHTML=h+'</tbody></table>';
+  renderInTable();
+}
+function renderInTable(){
+  const q=inQ.value.trim(),w=inWin.value,f=inSt.value;
+  const rows=INB.filter(r=>(!q||(r[1]+r[2]).includes(q))&&(!w||winTxt(r)===w)&&(!f||inState(r)[0]===f));
+  let h='',cat='';
+  rows.forEach(r=>{
+    if(r[1]!==cat){cat=r[1];h+=`<tr class="grp"><td colspan="11">${esc(cat)}</td></tr>`}
+    const s=inState(r),got=(S.inb[r[0]]||{}).qty;
+    h+=`<tr><td class="n">${r[0]}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td class="n">${num(r[3])}</td><td>${r[4]?esc(r[4]):'<span class="pill s-warn">確認中</span>'}</td><td class="n">${num(r[5])}</td><td class="n">${num(r[6])}</td><td><span class="rng"><input class="dt" type="date" id="iws${r[0]}" data-ws="${r[0]}" value="${winOf(r)?isoD(winOf(r)[0]):''}" ${canWrite?'':'disabled'} aria-label="第${r[0]}項預計進倉起">–<input class="dt" type="date" id="iwe${r[0]}" data-we="${r[0]}" value="${winOf(r)?isoD(winOf(r)[1]):''}" ${canWrite?'':'disabled'} aria-label="第${r[0]}項預計進倉迄">${(S.inb[r[0]]||{}).ws?'<span class="pill s-warn">已改</span>':''}</span></td>
+    <td class="n"><input class="qty" id="inq${r[0]}" data-in="${r[0]}" type="number" min="0" value="${got??''}" placeholder="0" ${canWrite?'':'disabled'} aria-label="第${r[0]}項實收數量"></td><td><input class="dt" type="date" id="ina${r[0]}" data-arr="${r[0]}" value="${(S.inb[r[0]]||{}).arrived||''}" min="2026-11-01" max="2027-01-10" ${canWrite?'':'disabled'} aria-label="第${r[0]}項實際到貨日"></td><td><span class="pill ${s[1]}">${s[0]}</span></td></tr>`});
+  inBody.innerHTML=h||'<tr><td colspan="11">沒有符合的品項</td></tr>';
+  inCnt.textContent=`${rows.length} 項・${num(rows.reduce((a,r)=>a+r[3],0))} 件`;
+}
+document.querySelector('.subtabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;document.querySelectorAll('.subtabs button').forEach(x=>x.setAttribute('aria-selected',x===b));sp_cal.hidden=b.dataset.st!=='cal';sp_log.hidden=b.dataset.st!=='log'});
+const sp_cal=document.getElementById('sp-cal'),sp_log=document.getElementById('sp-log');
+['inQ','inWin','inSt'].forEach(id=>document.getElementById(id).addEventListener('input',renderInTable));
+inBody.addEventListener('change',async e=>{
+  const ds=e.target.dataset,id=ds.in||ds.arr||ds.ws||ds.we;if(!id)return;
+  const r=INB.find(x=>String(x[0])===id),w=winOf(r);
+  const cur=Object.assign({qty:0,arrived:''},S.inb[id],{at:Date.now()});
+  if(ds.in)cur.qty=Math.max(0,parseInt(e.target.value||'0',10)||0);
+  else if(ds.arr)cur.arrived=e.target.value||'';
+  else{
+    if(!e.target.value)return;
+    cur.ws=ds.ws?e.target.value:(cur.ws||(w?isoD(w[0]):e.target.value));
+    cur.we=ds.we?e.target.value:(cur.we||(w?isoD(w[1]):e.target.value));
+    if(cur.we<cur.ws){if(ds.ws)cur.we=cur.ws;else cur.ws=cur.we}
+  }
+  await write('inb',id,cur);
+});
+
+// ---------- 加工排程 ----------
+// 各組合對應的主體進倉品項（入倉明細項次），門市造型便當袋無對應
+const INMAP=[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,22,23,25,24,21,20,26,27,28,29,30,31,35,36,37,37,38,32,33,34,39,null];
+const inwTxt=i=>INMAP[i]?winTxt(INB[INMAP[i]-1]):'待確認';
+const inw=i=>(INMAP[i]&&winOf(INB[INMAP[i]-1]))||[D(11,26),D(11,30)];
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const fromIso=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const arrived=i=>{const n=INMAP[i],a=n&&S.inb[n];return a&&a.arrived?fromIso(a.arrived):null};
+const ready=i=>arrived(i)||inw(i)[1];
+const WD=days(D(12,1),D(12,24)).filter(d=>d.getDay()!==0);
+const CAP=[0].map(w=>Math.ceil(PROC.reduce((a,r)=>a+r[3+w],0)/WD.length*1.15/100)*100);
+const PLAN=PROC.map(()=>[{}]);
+const workDays=(a,b)=>days(a,b).filter(d=>d.getDay()!==0);
+function buildPlan(){
+  const left=WD.map(()=>CAP[0]);
+  PROC.forEach((r,i)=>{PLAN[i][0]={}});
+  PROC.forEach((r,i)=>{
+    const o=S.sched[r[0]];if(!o||!o.start||!o.end)return;
+    const wd=workDays(fromIso(o.start),fromIso(o.end));if(!wd.length)return;
+    const per=Math.floor(r[3]/wd.length);let rest=r[3]-per*wd.length;
+    wd.forEach(d=>{const q=per+(rest-->0?1:0);PLAN[i][0][key(d)]=q;const k=WD.findIndex(x=>+x===+d);if(k>=0)left[k]-=q});
+  });
+  const order=PROC.map((r,i)=>i).filter(i=>!(S.sched[PROC[i][0]]||{}).start).sort((a,b)=>ready(a)-ready(b)||PROC[b][3]-PROC[a][3]);
+  order.forEach(i=>{
+    let need=PROC[i][3];
+    for(let k=0;k<WD.length&&need>0;k++){
+      if(WD[k]<=ready(i))continue;
+      const t=Math.min(Math.max(left[k],0),need);if(t<=0)continue;
+      left[k]-=t;need-=t;PLAN[i][0][key(WD[k])]=t;
+    }
+    if(need>0){const k=key(WD[WD.length-1]);PLAN[i][0][k]=(PLAN[i][0][k]||0)+need}
+  });
+}
+const span=i=>{const ds=days(D(11,15),D(1,15)).filter(d=>PLAN[i][0][key(d)]>0);return ds.length?[ds[0],ds[ds.length-1]]:null};
+const planTo=(i,w,d)=>Object.entries(PLAN[i][w]).reduce((a,[k,q])=>{const [m,dd]=k.split('-').map(Number);return a+(D(m,dd)<=d?q:0)},0);
+let edit=null; // 編輯模式：{d:{組合序:{start,end,first,reset}}}，按儲存才寫入
+const CALD=days(D(11,16),D(12,26));
+function renderSchedule(){
+  buildPlan();
+  scEdit.hidden=!!edit;scSave.hidden=scCancel.hidden=!edit;scEdit.disabled=!canWrite;
+  const nDraft=edit?Object.keys(edit.d).filter(k=>edit.d[k].reset||(edit.d[k].start&&!edit.d[k].first)).length:0;
+  scSave.textContent=nDraft?`儲存（${nDraft}）`:'儲存';scSave.disabled=!nDraft;
+  scHint.textContent=edit?'點各列的開始日與結束日選區間，可一次改多列，按「儲存」才生效':'';
+  const tot=PROC.reduce((a,r)=>a+r[3],0);
+  const manual=PROC.filter(r=>(S.sched[r[0]]||{}).start).length;
+  const early=PROC.filter((r,i)=>{const s=span(i);return s&&s[0]<=ready(i)}).length;
+  const got=PROC.filter((r,i)=>arrived(i)).length;
+  const planToday=PROC.reduce((a,r,i)=>a+planTo(i,0,TODAY),0);
+  const load=CALD.map(d=>PROC.reduce((a,r,i)=>a+(PLAN[i][0][key(d)]||0),0));
+  const over=load.filter(q=>q>CAP[0]).length;
+  scKpi.innerHTML=[
+    ['加工總組數',num(tot),`${PROC.length} 個組合・${WD.length} 個工作天`],
+    ['主體已到貨',`${got} / ${PROC.length}`,'依進貨頁「實際到貨日」'],
+    ['今日應累計完成',num(planToday),TODAY<WD[0]?'12/1 開始加工':`${(planToday/tot*100).toFixed(0)}%`],
+    ['手動調整時段',manual,'其餘依到貨日自動排'],
+    ['加工早於到貨',early,early?'請確認主體已到貨':'無衝突'],
+    ['超出產能天數',over,over?'請分散時段或加派人力':'產能足夠'],
+  ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
+  let h=`<table><thead><tr><th class="sq">序</th><th class="lbl">組合</th><th>加工時段</th><th class="n">組數</th><th>預計進貨</th><th>實際到貨</th>${CALD.map(d=>`<th class="d ${d.getDay()===0?'we':''} ${+d===+TODAY?'now':''}">${d.getDate()===1||+d===+CALD[0]?`<small>${d.getMonth()+1}月</small>`:''}${d.getDate()}</th>`).join('')}</tr></thead><tbody>`;
+  let cat='';
+  PROC.forEach((r,i)=>{
+    if(r[1]!==cat){cat=r[1];h+=`<tr class="grp"><td class="sq"></td><td class="lbl">${esc(cat)}</td><td colspan="${CALD.length+4}"></td></tr>`}
+    const s=span(i),man=!!(S.sched[r[0]]||{}).start,conflict=s&&s[0]<=ready(i),arr=arrived(i);
+    const dr=edit&&edit.d[r[0]],changed=dr&&(dr.reset||(dr.start&&!dr.first));
+    const ds=dr&&dr.start?fromIso(dr.start):null,de=dr&&dr.end?fromIso(dr.end):null;
+    let txt=s?`${fmt(s[0])}–${fmt(s[1])}`:'—';
+    if(dr&&dr.first)txt=fmt(fromIso(dr.first))+' → 點結束日';else if(dr&&dr.reset)txt='改回自動';else if(ds)txt=`${fmt(ds)}–${fmt(de)}`;
+    h+=`<tr class="${changed||dr&&dr.first?'picking':''}"><td class="sq n">${r[0]}</td><td class="lbl" title="${esc(r[2])}">${esc(r[2].replace(/^[\d,]+元/,''))}</td><td><span class="rng"><span class="date">${txt}</span>${changed?'<span class="pill s-warn">未儲存</span>':man?'<span class="pill s-warn">手動</span>':''}${edit&&man&&!(dr&&dr.reset)?`<button type="button" class="b sm" data-reset="${r[0]}">改回自動</button>`:''}${conflict&&!edit?'<span class="pill s-bad">早於到貨</span>':''}</span></td>
+    <td class="n">${num(r[3])}</td>
+    <td>${inwTxt(i)}</td>
+    <td>${arr?`<span class="pill s-ok">${fmt(arr)}</span>`:INMAP[i]?'<span class="pill s-idle">未到</span>':'—'}</td>
+    ${CALD.map(d=>{
+      const q=PLAN[i][0][key(d)]||0,inb=d>=inw(i)[0]&&d<=inw(i)[1],isArr=arr&&+d===+arr;
+      const useDraft=dr&&!dr.reset&&ds&&!dr.first,inDraft=useDraft&&d>=ds&&d<=de&&d.getDay()!==0;
+      const base=useDraft||(dr&&dr.first)?(inDraft?'draft':inb?'on':''):(q?(d<=ready(i)?'proc bad':'proc'):inb?'on':'');
+      const cls=['d',edit?'pk':'',base,isArr?'arr':'',dr&&dr.first===iso(d)?'pstart':''].join(' ');
+      return `<td class="${cls}" data-r="${r[0]}" data-d="${iso(d)}" title="${fmt(d)}${inb?'｜預計進貨':''}${isArr?'｜實際到貨':''}${q?'｜加工 '+num(q)+' 組':''}"></td>`}).join('')}</tr>`});
+  h+=`<tr class="grp"><td class="sq"></td><td class="lbl">每日加工量</td><td></td><td class="n">${num(tot)}</td><td colspan="2"></td>${load.map(q=>`<td class="d" style="font-size:9px;${q>CAP[0]?'color:var(--bad)':''}" title="${num(q)} 組">${q?Math.round(q/100)/10+'k':''}</td>`).join('')}</tr>`;
+  scCal.innerHTML=h+'</tbody></table>';
+}
+scEdit.addEventListener('click',()=>{if(!canWrite)return;edit={d:{}};banner('');renderSchedule()});
+scCancel.addEventListener('click',()=>{edit=null;banner('');renderSchedule()});
+scSave.addEventListener('click',async()=>{
+  const ids=Object.keys(edit.d).filter(k=>edit.d[k].reset||(edit.d[k].start&&!edit.d[k].first));
+  const bad=ids.filter(k=>!edit.d[k].reset&&!workDays(fromIso(edit.d[k].start),fromIso(edit.d[k].end)).length);
+  if(bad.length){banner(`序 ${bad.join('、')} 選取的區間只有週日，請重新選擇。`);return}
+  const d=edit.d;edit=null;banner('');
+  for(const k of ids){
+    if(d[k].reset){delete S.sched[k];emit();if(db){try{await db.collection('sched').doc(k).delete()}catch(err){banner('還原自動排程失敗（'+(err&&err.code||'unknown')+'）。')}}}
+    else await write('sched',k,{start:d[k].start,end:d[k].end,at:Date.now()});
+  }
+  renderSchedule();
+});
+scCal.addEventListener('click',e=>{
+  if(!edit)return;
+  const rs=e.target.dataset&&e.target.dataset.reset;
+  if(rs){edit.d[rs]={reset:true};renderSchedule();return}
+  const td=e.target.closest('td.pk');if(!td)return;
+  const id=td.dataset.r,dr=edit.d[id]&&!edit.d[id].reset?edit.d[id]:(edit.d[id]={});
+  if(!dr.first){dr.first=td.dataset.d}
+  else{let a=dr.first,b=td.dataset.d;if(b<a)[a,b]=[b,a];dr.start=a;dr.end=b;dr.first=''}
+  renderSchedule();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&edit&&!view.startsWith('f')){edit=null;renderSchedule()}});
+
+// ---------- 廠域儲位 ----------
+const DEF_LAYOUT={zones:[{n:'A',r:2,b:10},{n:'B',r:2,b:10},{n:'C',r:2,b:10},{n:'D',r:2,b:10}],docks:['1 號碼頭','2 號碼頭'],areas:['驗收區','流通加工區','出貨暫存區'],blocked:[]};
+const layout=()=>S.layout||DEF_LAYOUT;
+const ITEMS={};
+INB.forEach(r=>ITEMS['I'+r[0]]={name:`#${r[0]} ${r[1]}（${r[2]}）`,kind:1,seq:'I'+String(r[0]).padStart(3,'0')});
+PROC.forEach(r=>ITEMS['P'+r[0]]={name:`成品#${r[0]} ${r[2]}`,kind:2,seq:'P'+String(r[0]).padStart(3,'0')});
+const nameToKey={};Object.entries(ITEMS).forEach(([k,v])=>nameToKey[v.name]=k);
+itemList.innerHTML=Object.values(ITEMS).map(v=>`<option value="${esc(v.name)}"></option>`).join('');
+const sel=new Set();let mvDir='in',mode3d=false,editMode=false,noEd=false,draft=null;
+try{mode3d=localStorage.getItem('fb27-3d')==='1'}catch(e){}
+const slotId=(z,row,b)=>`DD-${z}${row}-${String(b).padStart(2,'0')}`;
+const short=id=>id.slice(3);
+const slotIds=()=>{const L=layout(),r=[];L.zones.forEach(z=>{for(let row=1;row<=z.r;row++)for(let b=1;b<=z.b;b++)r.push(slotId(z.n,row,b))});return r.filter(id=>!L.blocked.includes(id))};
+// 斜二測：平面沿 45° 方向壓縮為一半；高度方向維持真實長度（以陰影層疊出板位堆高）
+const OBQ=0.354;
+function renderFloor(){
+  const L=layout(),ids=slotIds(),q=flQ.value.trim();
+  const used=ids.filter(id=>S.slots[id]&&S.slots[id].qty>0);
+  const qty=used.reduce((a,id)=>a+S.slots[id].qty,0);
+  const maxQ=Math.max(1,...used.map(id=>S.slots[id].qty));
+  flTitle.textContent=`${ids.length} 個板位${L.blocked.length?`・${L.blocked.length} 格停用`:''}`;
+  btn3d.setAttribute('aria-pressed',mode3d);btn3d.textContent=mode3d?'平面顯示':'斜二測立體';
+  btnEdit.setAttribute('aria-pressed',editMode);btnEdit.textContent=editMode?'完成編輯':'編輯儲位配置';
+  editor.hidden=!editMode;
+  flKpi.innerHTML=[
+    ['使用板位',`${used.length} / ${ids.length}`,`<div class="bar"><i style="width:${used.length/Math.max(ids.length,1)*100}%;background:var(--accent)"></i></div>`],
+    ['在庫件數',num(qty),`${new Set(used.map(id=>S.slots[id].item)).size} 個品項`],
+    ['加工目標',num(PROC.reduce((a,r)=>a+r[3],0)),'組'],
+  ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
+  let h=`<div class="dock">${L.docks.map(d=>`<div>${esc(d)}</div>`).join('')}</div><div class="zones">`;
+  L.zones.forEach(z=>{
+    for(let row=1;row<=z.r;row++){
+      h+=`<div class="zone"><div class="zn">${row===1?esc(z.n):''}</div><div class="bays" style="grid-template-columns:repeat(${z.b},minmax(44px,1fr))">`;
+      for(let b=1;b<=z.b;b++){
+        const id=slotId(z.n,row,b),off=L.blocked.includes(id),s=S.slots[id],it=!off&&s&&s.qty>0?ITEMS[s.item]:null;
+        const hl=q&&it&&it.name.includes(q);
+        const lv=it?Math.max(2,Math.round(s.qty/maxQ*12)):0;
+        const sh=mode3d&&it?`box-shadow:${Array.from({length:lv},(_,k)=>`-${k+1}px ${((k+1)/OBQ).toFixed(1)}px 0 var(--${it.kind===2?'ok':'gold'})`).join(',')};transform:translate(${lv}px,-${(lv/OBQ).toFixed(1)}px)`:'';
+        h+=`<button type="button" class="slot ${off?'off':''} ${it?'f'+it.kind:''} ${hl?'hl':''} ${sel.has(id)?'sel':''}" style="${sh}" data-s="${id}" aria-pressed="${sel.has(id)}" title="${short(id)}${off?'｜停用（柱位／走道）':it?'｜'+esc(it.name)+'｜'+s.qty+' 件':'｜空'}"><span class="id">${z.n}${row}-${String(b).padStart(2,'0')}</span>${off?'✕':it?`<b>${it.seq}</b><br>${num(s.qty)}`:''}</button>`;
+      }
+      h+='</div></div>';
+    }
+  });
+  h+=`</div><div class="areas">${L.areas.map(a=>`<div>${esc(a)}</div>`).join('')}</div>`;
+  plan.innerHTML=h;plan.classList.toggle('three',mode3d);
+  plan.parentElement.style.height=mode3d?Math.ceil(plan.offsetHeight*OBQ+70)+'px':'';plan.classList.toggle('editing',editMode);
+  if(editMode&&!noEd)renderEditor();
+  const agg={};Object.entries(S.slots).forEach(([id,s])=>{if(!(s.qty>0))return;(agg[s.item]=agg[s.item]||{q:0,ids:[]});agg[s.item].q+=s.qty;agg[s.item].ids.push(short(id))});
+  const rows=Object.entries(agg).sort((a,b)=>(ITEMS[a[0]]||{}).seq>(ITEMS[b[0]]||{}).seq?1:-1);
+  invBody.innerHTML=rows.map(([k,v])=>`<tr><td class="n">${(ITEMS[k]||{seq:''}).seq}</td><td>${esc((ITEMS[k]||{name:k}).name)}</td><td class="n">${num(v.q)}</td><td class="n">${v.ids.length}</td><td style="white-space:normal">${v.ids.sort().join('、')}</td></tr>`).join('')||'<tr><td colspan="5">尚無在庫紀錄。點選圖上的板位，再按「入庫」即可登錄。</td></tr>';
+  renderSelbar();renderLog();
+}
+function renderSelbar(){
+  [...sel].forEach(id=>{if(!slotIds().includes(id))sel.delete(id)});
+  selbar.hidden=!sel.size||editMode;
+  selTxt.textContent=`已選 ${sel.size} 格：${[...sel].sort().map(short).slice(0,6).join('、')}${sel.size>6?'…':''}`;
+  openIn.disabled=openOut.disabled=!canWrite;
+}
+// 儲位配置編輯
+function renderEditor(){
+  if(!draft)draft=JSON.parse(JSON.stringify(layout()));
+  edZones.innerHTML=draft.zones.map((z,i)=>`<tr><td><input id="ez-n${i}" data-i="${i}" data-f="n" value="${esc(z.n)}" maxlength="3" size="3" aria-label="區域名稱"></td><td><input id="ez-r${i}" data-i="${i}" data-f="r" type="number" min="1" max="6" value="${z.r}" aria-label="排數"></td><td><input id="ez-b${i}" data-i="${i}" data-f="b" type="number" min="1" max="30" value="${z.b}" aria-label="每排板位"></td><td><button type="button" class="b sm" data-del="${i}">刪除</button></td></tr>`).join('');
+  if(document.activeElement!==edDocks)edDocks.value=draft.docks.join('、');
+  if(document.activeElement!==edAreas)edAreas.value=draft.areas.join('、');
+}
+editor.addEventListener('input',e=>{
+  const t=e.target;if(!draft)return;
+  if(t.dataset.f){const z=draft.zones[+t.dataset.i];z[t.dataset.f]=t.dataset.f==='n'?t.value.toUpperCase().replace(/[^A-Z0-9]/g,''):Math.max(1,Math.min(t.dataset.f==='r'?6:30,parseInt(t.value||'1',10)||1))}
+  if(t===edDocks)draft.docks=t.value.split(/[、,，]/).map(s=>s.trim()).filter(Boolean);
+  if(t===edAreas)draft.areas=t.value.split(/[、,，]/).map(s=>s.trim()).filter(Boolean);
+  previewDraft();
+});
+editor.addEventListener('click',e=>{
+  if(e.target.dataset.del!=null){draft.zones.splice(+e.target.dataset.del,1);renderEditor();previewDraft()}
+  if(e.target===edAdd){const used=draft.zones.map(z=>z.n);const n=[...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].find(c=>!used.includes(c))||'Z1';draft.zones.push({n,r:2,b:10});renderEditor();previewDraft()}
+  if(e.target===edReset){draft=JSON.parse(JSON.stringify(DEF_LAYOUT));renderEditor();previewDraft()}
+});
+function previewDraft(){const keep=S.layout;S.layout=draft;noEd=true;renderFloor();noEd=false;S.layout=keep}
+async function saveLayout(){
+  const names=draft.zones.map(z=>z.n);
+  if(names.some(n=>!n)||new Set(names).size!==names.length){edMsg.className='msg err';edMsg.textContent='區域名稱不可空白或重複（限英數字）。';return false}
+  const keep=S.layout;S.layout=draft;const ids=new Set(slotIds());S.layout=keep;
+  const lost=Object.entries(S.slots).filter(([id,s])=>s.qty>0&&!ids.has(id)).map(([id])=>short(id));
+  if(lost.length){edMsg.className='msg err';edMsg.textContent=`以下板位仍有庫存，請先出庫再刪除或停用：${lost.slice(0,8).join('、')}${lost.length>8?'…':''}`;return false}
+  return await write1('layout','DD',draft);
+}
+btnEdit.addEventListener('click',async()=>{
+  if(!editMode){if(!canWrite)return;editMode=true;draft=null;sel.clear();edMsg.textContent='';renderFloor();return}
+  if(await saveLayout()){editMode=false;draft=null;renderFloor()}
+});
+edCancel.addEventListener('click',()=>{editMode=false;draft=null;renderFloor()});
+btn3d.addEventListener('click',()=>{mode3d=!mode3d;try{localStorage.setItem('fb27-3d',mode3d?'1':'0')}catch(e){}renderFloor()});
+plan.addEventListener('click',e=>{
+  const b=e.target.closest('.slot');if(!b)return;const id=b.dataset.s;
+  if(editMode){
+    if(S.slots[id]&&S.slots[id].qty>0){edMsg.className='msg err';edMsg.textContent=`${short(id)} 有庫存，不能停用。`;return}
+    const i=draft.blocked.indexOf(id);i>=0?draft.blocked.splice(i,1):draft.blocked.push(id);previewDraft();return}
+  if(layout().blocked.includes(id))return;
+  sel.has(id)?sel.delete(id):sel.add(id);
+  b.classList.toggle('sel',sel.has(id));b.setAttribute('aria-pressed',sel.has(id));renderSelbar();
+});
+flQ.addEventListener('input',renderFloor);
+selClear.addEventListener('click',()=>{sel.clear();renderFloor()});
+// 出入庫視窗
+function setDir(d){
+  mvDir=d;mvIn.setAttribute('aria-pressed',d==='in');mvOut.setAttribute('aria-pressed',d==='out');
+  mvTitle.textContent=`${d==='in'?'入庫':'出庫'}・${sel.size} 格`;
+  mvItemL.hidden=d==='out';mvAllL.hidden=d==='in';mvQtyL.hidden=d==='out'&&mvAll.checked;
+  mvGo.textContent=d==='in'?'確認入庫':'確認出庫';
+}
+function openModal(d){
+  if(!sel.size)return;
+  mvSlots.innerHTML=[...sel].sort().map(id=>{const s=S.slots[id];return`<span class="chip">${short(id)}｜${s&&s.qty>0?esc(ITEMS[s.item].seq)+' '+num(s.qty)+' 件':'空'}</span>`}).join('');
+  const items=[...new Set([...sel].map(id=>S.slots[id]&&S.slots[id].qty>0?S.slots[id].item:null).filter(Boolean))];
+  mvItem.value=items.length===1?ITEMS[items[0]].name:'';
+  mvQty.value='';mvNote.value='';mvMsg.textContent='';mvAll.checked=true;
+  setDir(d);modal.hidden=false;(d==='in'?mvItem:mvAll).focus();
+}
+const closeModal=()=>{modal.hidden=true};
+openIn.addEventListener('click',()=>openModal('in'));
+openOut.addEventListener('click',()=>openModal('out'));
+mvIn.addEventListener('click',()=>setDir('in'));mvOut.addEventListener('click',()=>setDir('out'));
+mvAll.addEventListener('change',()=>setDir(mvDir));
+mvCancel.addEventListener('click',closeModal);
+modal.addEventListener('click',e=>{if(e.target===modal)closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)closeModal()});
+mvForm.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const err=t=>{mvMsg.className='msg err';mvMsg.textContent=t};
+  const ids=[...sel].sort(),q=parseInt(mvQty.value,10);
+  const plans=[];
+  if(mvDir==='in'){
+    const k=nameToKey[mvItem.value.trim()];
+    if(!k)return err('請從清單選擇商品名稱。');
+    if(!(q>0))return err('每格數量需為正整數。');
+    const mixed=ids.filter(id=>S.slots[id]&&S.slots[id].qty>0&&S.slots[id].item!==k);
+    if(mixed.length)return err(`${mixed.map(short).join('、')} 已放其他品項，不同品項不可放在同一板。`);
+    ids.forEach(id=>plans.push({id,item:k,qty:q,nq:((S.slots[id]||{}).qty||0)+q}));
+  }else{
+    const empty=ids.filter(id=>!(S.slots[id]&&S.slots[id].qty>0));
+    if(empty.length)return err(`${empty.map(short).join('、')} 沒有庫存，請取消選取。`);
+    if(!mvAll.checked&&!(q>0))return err('每格數量需為正整數。');
+    const short_=ids.filter(id=>!mvAll.checked&&S.slots[id].qty<q);
+    if(short_.length)return err(`${short_.map(short).join('、')} 庫存不足 ${num(q)} 件。`);
+    ids.forEach(id=>{const s=S.slots[id],n=mvAll.checked?s.qty:q;plans.push({id,item:s.item,qty:n,nq:s.qty-n})});
+  }
+  mvGo.disabled=true;
+  const uid=user?await user.id().catch(()=>null):null;
+  let done=0;
+  for(const p of plans){
+    const ok=await write('slots',p.id,p.nq>0?{item:p.item,qty:p.nq,at:Date.now()}:{item:'',qty:0,at:Date.now()});
+    if(!ok)break;done++;
+    await add('moves',{ts:Date.now(),slot:p.id,dir:mvDir,item:p.item,qty:p.qty,note:mvNote.value.trim().slice(0,80),by:uid||''});
+  }
+  mvGo.disabled=false;
+  if(done===plans.length){closeModal();sel.clear();renderFloor()}
+  else err(`只完成 ${done} / ${plans.length} 格，其餘未儲存，請再試一次。`);
+});
+let names={};
+async function renderLog(){
+  const ms=S.moves.slice(0,40);
+  const ids=[...new Set(ms.map(m=>m.by).filter(Boolean))];
+  if(user&&ids.some(i=>!(i in names))){try{const ps=await user.profiles(ids);ids.forEach(i=>names[i]=(ps[i]&&ps[i].name)||'')}catch(e){}}
+  log.innerHTML=ms.map(m=>{const d=new Date(m.ts);return`<div><span class="t">${fmt(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</span><span><span class="pill ${m.dir==='in'?'s-ok':'s-warn'}">${m.dir==='in'?'入':'出'}</span> ${esc(short(m.slot))}｜${esc((ITEMS[m.item]||{name:m.item}).name)} ${num(m.qty)} 件</span><span></span><span class="note">${esc(names[m.by]||'')}${m.note?'・'+esc(m.note):''}</span></div>`}).join('')||'<div><span></span><span class="note">尚無異動紀錄</span></div>';
+}
+
+// ---------- 加工進度 ----------
+function renderProgress(){
+  buildPlan();
+  const q=pgQ.value.trim();
+  const done=(i,w)=>((S.proc[i+1]||{})['w'+w])||0;
+  const tot=PROC.reduce((a,r)=>a+r[6],0);
+  const sumW=w=>PROC.reduce((a,r,i)=>a+Math.min(done(i,w),r[3+w]),0);
+  const all=sumW(0)+sumW(1)+sumW(2);
+  const planNow=PROC.reduce((a,r,i)=>a+[0].reduce((b,w)=>b+planTo(i,w,TODAY),0),0);
+  pgKpi.innerHTML=[
+    ['總完成組數',num(all),`<div class="bar"><i style="width:${all/tot*100}%;background:var(--ok)"></i></div>${(all/tot*100).toFixed(1)}%（目標 ${num(tot)}）`],
+    ...[0].map(w=>{const t=PROC.reduce((a,r)=>a+r[3+w],0),d=sumW(w);return[WH[w],num(d),`<div class="bar"><i style="width:${d/t*100}%;background:var(--accent)"></i></div>${(d/t*100).toFixed(1)}%（${num(t)}）`]}),
+    ['與排程差距',(all-planNow>=0?'+':'')+num(all-planNow),TODAY<WD[0]?'尚未開始加工':'正數為超前'],
+  ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
+  let h='',cat='',n=0;
+  PROC.forEach((r,i)=>{
+    if(q&&!r[2].includes(q))return;n++;
+    if(r[1]!==cat){cat=r[1];h+=`<tr class="grp"><td colspan="7">${esc(r[1])}</td></tr>`}
+    const d=[0].map(w=>Math.min(done(i,w),r[3+w])),sum=d[0]+d[1]+d[2],pct=sum/r[6]*100;
+    const pl=[0].reduce((a,w)=>a+planTo(i,w,TODAY),0),gap=sum-pl;
+    const st=sum>=r[6]?['已完成','s-ok']:pl===0?['未到排程','s-idle']:gap>=0?['符合進度','s-ok']:gap>-0.15*r[6]?[`落後 ${num(-gap)}`,'s-warn']:[`落後 ${num(-gap)}`,'s-bad'];
+    h+=`<tr><td class="n">${r[0]}</td><td>${esc(r[2])}${r[7]?` <span class="pill s-warn">${esc(r[7])}</span>`:''}</td>${[0].map(w=>`<td class="n"><input class="qty" id="pg${r[0]}-${w}" data-p="${r[0]}" data-w="${w}" type="number" min="0" max="${r[3+w]}" value="${done(i,w)||''}" placeholder="0" ${canWrite?'':'disabled'} aria-label="${WH[w]} ${esc(r[2])} 完成組數"> / ${num(r[3+w])}</td>`).join('')}
+    <td><div class="prog"><div class="bar"><i style="width:${pct}%;background:var(--ok)"></i></div><span class="note">${pct.toFixed(0)}%</span></div></td><td><span class="pill ${st[1]}">${st[0]}</span></td></tr>`});
+  pgBody.innerHTML=h;pgCnt.textContent=`${n} 個組合`;
+}
+pgQ.addEventListener('input',renderProgress);
+pgBody.addEventListener('change',async e=>{
+  const p=e.target.dataset.p;if(!p)return;
+  const w=+e.target.dataset.w,v=Math.max(0,parseInt(e.target.value||'0',10)||0);
+  const cur=Object.assign({w0:0,w1:0,w2:0},S.proc[p]);cur['w'+w]=v;cur.at=Date.now();
+  await write('proc',p,cur);
+});
+
+// ---------- 寫入 ----------
+async function write(col,id,data){
+  S[col][id]=data;emit();
+  if(!db)return true;
+  try{await db.collection(col).doc(String(id)).set(data);return true}
+  catch(e){if(e&&e.code==='invalid_argument'){canWrite=false;banner('你的權限只能檢視，無法登錄資料。');emit()}else banner('儲存失敗，請稍後再試（'+(e&&e.code||'unknown')+'）。');return false}
+}
+async function write1(col,id,data){
+  S.layout=data;emit();
+  if(!db)return true;
+  try{await db.collection(col).doc(id).set(data);return true}
+  catch(e){banner('平面圖儲存失敗（'+(e&&e.code||'unknown')+'）。');return false}
+}
+async function add(col,data){
+  if(!db){S.moves.unshift(data);emit();return}
+  try{await db.collection(col).add(data)}catch(e){banner('異動紀錄寫入失敗（'+(e&&e.code||'unknown')+'）。')}
+}
+
+// ---------- 分頁 ----------
+const VIEWS=['inbound','schedule','floor','progress'];
+let view=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):'inbound';
+const R={inbound:renderInbound,schedule:renderSchedule,floor:renderFloor,progress:renderProgress};
+function show(v){view=v;VIEWS.forEach(x=>{document.getElementById('v-'+x).hidden=x!==v;document.getElementById('t-'+x).setAttribute('aria-selected',x===v)});try{history.replaceState(null,'','#'+v)}catch(e){}R[v]()}
+document.querySelector('nav').addEventListener('click',e=>{const b=e.target.closest('button');if(b)show(b.dataset.v)});
+listeners.add(()=>R[view]());
+show(view);
+
+// ---------- 連線 ----------
+
+const FB_CONFIG={apiKey:"AIzaSyC8lIcD80FpUY3iUCzSZW_vBQKTrmQKPBA",authDomain:"voucher-returns.firebaseapp.com",projectId:"voucher-returns",storageBucket:"voucher-returns.firebasestorage.app",messagingSenderId:"104553695404",appId:"1:104553695404:web:41f2c9a5ec4b8c44c6b709"};
+async function connectFirestore(){
+  const V='https://www.gstatic.com/firebasejs/10.13.2/';
+  const {initializeApp}=await import(V+'firebase-app.js');
+  const F=await import(V+'firebase-firestore.js');
+  const fs=F.initializeFirestore(initializeApp(FB_CONFIG),{localCache:F.persistentLocalCache({tabManager:F.persistentMultipleTabManager()})});
+  const P=n=>'fb27_'+n;
+  const wrapDoc=d=>({id:d.id,exists:d.exists(),data:()=>d.data()});
+  const wrapErr=e=>({code:e&&e.code==='permission-denied'?'invalid_argument':'unavailable',message:String(e&&e.message||e)});
+  const docRef=(c,id)=>{const r=F.doc(fs,P(c),String(id));return{
+    set:d=>F.setDoc(r,d).catch(e=>{throw wrapErr(e)}),
+    delete:()=>F.deleteDoc(r).catch(e=>{throw wrapErr(e)}),
+    onSnapshot:(next,err)=>F.onSnapshot(r,s=>next(wrapDoc(s)),e=>err&&err(wrapErr(e)))}};
+  const query=(c,cons)=>({
+    orderBy:(f,dir)=>query(c,[...cons,F.orderBy(f,dir||'asc')]),
+    limit:n=>query(c,[...cons,F.limit(n)]),
+    onSnapshot:(next,err)=>F.onSnapshot(F.query(F.collection(fs,P(c)),...cons),s=>next({docs:s.docs.map(wrapDoc)}),e=>err&&err(wrapErr(e)))});
+  return{
+    collection:c=>Object.assign(query(c,[]),{doc:id=>docRef(c,id),add:d=>F.addDoc(F.collection(fs,P(c)),d).catch(e=>{throw wrapErr(e)})}),
+    doc:p=>{const [c,id]=p.split('/');return docRef(c,id)}};
+}
+(async()=>{
+  // Firestore（voucher-returns 專案）：集合名稱加上 fb27_ 前綴，與其他資料分開
+  try{db=await connectFirestore()}catch(e){setSync('off','離線');banner('無法連線共用資料庫，登錄內容不會保存，請檢查網路後重新整理。');return}
+  setSync('on','已連線・即時同步');
+  const sub=(col,fn)=>db.collection(col).onSnapshot(s=>{fn(s);emit()},e=>{setSync('off','連線中斷，請重新整理')});
+  sub('inb',s=>{S.inb={};s.docs.forEach(d=>S.inb[d.id]=d.data())});
+  sub('proc',s=>{S.proc={};s.docs.forEach(d=>S.proc[d.id]=d.data())});
+  db.doc('layout/DD').onSnapshot(d=>{if(d.exists&&!editMode){S.layout=d.data();emit()}},()=>{});
+  sub('sched',s=>{S.sched={};s.docs.forEach(d=>S.sched[d.id]=d.data())});
+  sub('slots',s=>{S.slots={};s.docs.forEach(d=>S.slots[d.id]=d.data())});
+  db.collection('moves').orderBy('ts','desc').limit(60).onSnapshot(s=>{S.moves=s.docs.map(d=>d.data());emit()},()=>{});
+})();
+</script>
+
+</body></html>

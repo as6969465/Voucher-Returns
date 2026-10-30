@@ -2,15 +2,10 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 目前登入僅由前端 Demo/FME 帳密把關，尚未串接 Firebase Auth，
-    // 因此這裡對所有人開放讀寫「共用刷入資料」這一份文件。
-    // TODO: 正式上線前建議導入 Firebase Auth，並將下面規則改為 request.auth != null 才能讀寫。
-    match /sessions/shared {
-      allow read, write: if true;
-    }
-    // 群組與已刷入序號分散成各自的小文件，避免單一文件超過 Firestore 1MB 上限
-    match /sessions/shared/{subcollection}/{docId} {
-      allow read, write: if true;
+    // 羊年福袋作業台（大肚倉）的共用資料：進貨、加工排程、加工進度、儲位、異動紀錄、儲位配置。
+    // 目前未串接 Firebase Auth，任何開啟網站的人都能讀寫；正式使用前建議加上登入並改為 request.auth != null。
+    match /{col}/{docId} {
+      allow read, write: if col in ['fb27_inb','fb27_proc','fb27_sched','fb27_slots','fb27_moves','fb27_layout'];
     }
 
     // 其餘路徑一律拒絕
