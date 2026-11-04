@@ -212,6 +212,8 @@ h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:
 .slinfo dd{margin:0;font-weight:500}
 .sllog{font-size:12.5px;display:grid;gap:4px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 .plan.io .slot:not(.off){cursor:copy}
+.datepick{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mute);white-space:nowrap}
+input.price{width:90px;text-align:right;font-family:var(--mono)}
 .thumb.has{border-style:solid;background:var(--panel)}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .imgview{min-height:160px;display:flex;align-items:center;justify-content:center;background:var(--sunk);border-radius:6px;overflow:hidden}
@@ -233,6 +235,7 @@ h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:
   <button role="tab" data-v="schedule" id="t-schedule">加工排程</button>
   <button role="tab" data-v="floor" id="t-floor">廠域儲位</button>
   <button role="tab" data-v="progress" id="t-progress">加工展開進度</button>
+  <button role="tab" data-v="cost" id="t-cost">費用統計</button>
 </nav>
 <button type="button" class="b" id="themeBtn" aria-pressed="false">深色模式</button>
 </div>
@@ -310,6 +313,7 @@ h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:
   <div class="kpis" id="flKpi"></div>
   <div class="panel">
     <div class="tools">
+      <label class="datepick">庫存日期 <input type="date" id="flDate"></label><button type="button" class="b" id="flToday" hidden>回到今天</button>
       <input id="flQ" type="search" placeholder="找商品所在儲位…" list="itemList">
       <button type="button" class="b" id="btn3d" aria-pressed="false" hidden>斜二測立體</button>
       <button type="button" class="b p" id="btnIO" aria-pressed="false">進出貨</button>
@@ -365,6 +369,26 @@ h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:
     <div class="tools" style="justify-content:flex-end;margin:0"><button type="button" class="b" id="mvCancel">取消</button><button class="b p" type="submit" id="mvGo">確認登錄</button></div>
   </form>
 </div>
+
+<!-- 費用統計 -->
+<section id="v-cost" class="stack" hidden>
+  <div class="kpis" id="coKpi"></div>
+  <div class="panel">
+    <div class="phead">
+      <h2 class="one">費用統計<span>每日庫存板數 × 倉租單價＋每日加工組數 × 加工單價</span></h2>
+    </div>
+    <div class="tools">
+      <label class="datepick">起<input type="date" id="coFrom"></label>
+      <label class="datepick">迄<input type="date" id="coTo"></label>
+      <label class="datepick">倉租（元/板/日）<input type="number" id="coPallet" min="0" step="0.1" inputmode="decimal" class="price"></label>
+      <label class="datepick">加工（元/組）<input type="number" id="coProc" min="0" step="0.1" inputmode="decimal" class="price"></label>
+      <button type="button" class="b p" id="coSave" disabled>儲存單價</button>
+      <span class="msg" id="coMsg"></span>
+    </div>
+    <div class="tbl"><table><thead><tr><th>日期</th><th class="n">庫存板數</th><th class="n">倉租</th><th class="n">加工組數</th><th class="n">加工費</th><th class="n">當日合計</th><th class="n">累計</th></tr></thead><tbody id="coBody"></tbody></table></div>
+    <p class="note">庫存板數＝當天使用中的儲位格數（一格一板），沒有進出貨的日子沿用前一次紀錄；加工組數＝當天累計完成數減前一天。紀錄從開始使用本功能後才有。</p>
+  </div>
+</section>
 
 <!-- 加工進度 -->
 <section id="v-progress" class="stack" hidden>
@@ -733,14 +757,44 @@ const short=id=>id.slice(3);
 const slotIds=()=>{const L=layout(),r=[];L.zones.forEach(z=>{for(let row=1;row<=z.r;row++)for(let b=1;b<=z.b;b++)r.push(slotId(z.n,row,b))});return r.filter(id=>!L.blocked.includes(id))};
 // 斜二測：平面沿 45° 方向壓縮為一半；高度方向維持真實長度（以陰影層疊出板位堆高）
 const OBQ=0.354;
+// 歷史庫存：每次進出貨後把當天全部儲位存成一份「日快照」（layout/day-YYYY-MM-DD），
+// 並在 layout/days 記下每天的使用板數；查詢某日時取該日或之前最近一份快照（唯讀）
+let HIST=null;
+const dayKey=()=>isoD(new Date());
 function renderFloor(){
+  const today=dayKey();
+  if(!flDate.value)flDate.value=today;
+  flDate.max=today;flToday.hidden=!HIST;
+  if(HIST){const k=S.slots;S.slots=HIST.slots;try{renderFloor0()}finally{S.slots=k}
+    banner(`正在查看 ${HIST.asked} 的歷史庫存（唯讀）${HIST.from!==HIST.asked?`，資料取自 ${HIST.from||'—'} 的紀錄`:''}。按「回到今天」可恢復即時庫存。`)}
+  else renderFloor0();
+}
+function latestDayOn(d){const ds=Object.keys((S.days||{}).list||{}).filter(x=>x<=d).sort();return ds[ds.length-1]||null}
+async function loadHist(d){
+  if(!d||d>=dayKey()){HIST=null;banner('');renderFloor();return}
+  const from=latestDayOn(d);let slots={};
+  if(from){try{if(db){const s=await db.doc('layout/day-'+from).get();slots=s.exists?(s.data().slots||{}):{}}else slots=(S.dayDocs||{})[from]||{}}catch(e){banner('讀取歷史庫存失敗，請稍後再試。');return}}
+  HIST={asked:d,from,slots};ioMode=false;sel.clear();renderFloor();
+}
+flDate.addEventListener('change',()=>loadHist(flDate.value));
+flToday.addEventListener('click',()=>{flDate.value=dayKey();loadHist(null)});
+async function snapDay(){
+  const day=dayKey(),sl={};
+  Object.entries(S.slots).forEach(([id,s])=>{if(s.qty>0)sl[id]={item:s.item,qty:s.qty}});
+  const pallets=Object.keys(sl).length;
+  const days=Object.assign({},(S.days||{}).list,{[day]:pallets});
+  S.days={list:days};S.dayDocs=Object.assign({},S.dayDocs,{[day]:sl});
+  if(!db)return;
+  try{await db.doc('layout/day-'+day).set({slots:sl,pallets,at:Date.now()});await db.doc('layout/days').set({list:days,at:Date.now()})}catch(e){banner('當日庫存紀錄寫入失敗（'+(e&&e.code||'unknown')+'）。')}
+}
+function renderFloor0(){
   const L=layout(),ids=slotIds(),q=flQ.value.trim();
   const used=ids.filter(id=>S.slots[id]&&S.slots[id].qty>0);
   const qty=used.reduce((a,id)=>a+S.slots[id].qty,0);
   const maxQ=Math.max(1,...used.map(id=>S.slots[id].qty));
   flTitle.textContent=`${ids.length} 個板位${L.blocked.length?`・${L.blocked.length} 格停用`:''}`;
   btn3d.setAttribute('aria-pressed',mode3d);btn3d.textContent=mode3d?'平面顯示':'斜二測立體';
-  btnIO.setAttribute('aria-pressed',ioMode);btnIO.textContent=ioMode?'結束進出貨':'進出貨';btnIO.disabled=editMode||!canWrite;plan.classList.toggle('io',ioMode);
+  btnIO.setAttribute('aria-pressed',ioMode);btnIO.textContent=ioMode?'結束進出貨':'進出貨';btnIO.disabled=editMode||!canWrite||!!HIST;plan.classList.toggle('io',ioMode);
   btnEdit.setAttribute('aria-pressed',editMode);btnEdit.textContent=editMode?'完成編輯':'編輯儲位配置';
   editor.hidden=!editMode;
   flKpi.innerHTML=[
@@ -828,6 +882,10 @@ selClear.addEventListener('click',()=>{sel.clear();renderFloor()});
 let ioMode=false;
 btnIO.addEventListener('click',()=>{ioMode=!ioMode;sel.clear();renderFloor()});
 function showSlot(id){
+  if(HIST){const k=S.slots;S.slots=HIST.slots;try{showSlot0(id)}finally{S.slots=k}return}
+  showSlot0(id);
+}
+function showSlot0(id){
   const s=S.slots[id],it=s&&s.qty>0?ITEMS[s.item]:null;
   slTitle.textContent='儲位 '+short(id);
   const pid=it?(s.item[0]==='I'?+s.item.slice(1):INMAP[+s.item.slice(1)-1]):null;
@@ -916,6 +974,7 @@ mvForm.addEventListener('submit',async e=>{
     await add('moves',{ts:Date.now(),slot:p.id,dir:mvDir,item:p.item,qty:p.qty,note:mvNote.value.trim().slice(0,80),by:uid||''});
   }
   mvGo.disabled=false;
+  if(done)await snapDay();
   if(done===plans.length){closeModal();sel.clear();renderFloor()}
   else err(`只完成 ${done} / ${plans.length} 格，其餘未儲存，請再試一次。`);
 });
@@ -953,11 +1012,58 @@ function renderProgress(){
   pgBody.innerHTML=h;pgCnt.textContent=`${n} 個組合`;
 }
 pgQ.addEventListener('input',renderProgress);
+// ---------- 費用統計 ----------
+const DEF_PRICE={pallet:15,proc:10.5}; // 預設取自「各倉損益」大肚倉：倉租 15 元/板/日、加工 10.5 元/袋
+const price=()=>Object.assign({},DEF_PRICE,S.prices||{});
+function carry(map,d){const ks=Object.keys(map||{}).filter(x=>x<=d).sort();return ks.length?map[ks[ks.length-1]]:0}
+function renderCost(){
+  const p=price(),today=dayKey();
+  // 預設期間：最早一筆紀錄（或今天）到今天
+  const first=[...Object.keys(((S.days||{}).list)||{}),...Object.keys(((S.proclog||{}).days)||{})].sort()[0];
+  if(!coFrom.value)coFrom.value=first&&first<today?first:today;
+  if(!coTo.value)coTo.value=today;
+  if(document.activeElement!==coPallet)coPallet.value=p.pallet;
+  if(document.activeElement!==coProc)coProc.value=p.proc;
+  coSave.disabled=!canWrite||(+coPallet.value===p.pallet&&+coProc.value===p.proc);
+  const pal=(S.days||{}).list||{},pro=(S.proclog||{}).days||{};
+  const a=isoP(coFrom.value),b=isoP(coTo.value<coFrom.value?coFrom.value:coTo.value);
+  let cum=0,sumP=0,sumR=0,sumPal=0,sumSet=0;const rows=[];
+  days(a,b).forEach(d=>{
+    const k=isoD(d),prev=new Date(d);prev.setDate(prev.getDate()-1);
+    const pallets=carry(pal,k),sets=Math.max(0,carry(pro,k)-carry(pro,isoD(prev)));
+    const rent=pallets*p.pallet,pc=sets*p.proc;cum+=rent+pc;sumP+=rent;sumR+=pc;sumPal+=pallets;sumSet+=sets;
+    rows.push(`<tr${k===today?' class="grp"':''}><td>${fmt(d)}（${'日一二三四五六'[d.getDay()]}）</td><td class="n">${num(pallets)}</td><td class="n">${num(rent)}</td><td class="n">${num(sets)}</td><td class="n">${num(pc)}</td><td class="n"><b>${num(rent+pc)}</b></td><td class="n">${num(cum)}</td></tr>`);
+  });
+  coBody.innerHTML=rows.join('')+`<tr class="grp"><td>合計</td><td class="n">${num(sumPal)} 板日</td><td class="n">${num(sumP)}</td><td class="n">${num(sumSet)}</td><td class="n">${num(sumR)}</td><td class="n">${num(sumP+sumR)}</td><td></td></tr>`;
+  coKpi.innerHTML=[
+    ['期間總費用',num(sumP+sumR)+' 元',`${fmt(a)}–${fmt(b)}・${rows.length} 天`],
+    ['倉租費用',num(sumP)+' 元',`${num(sumPal)} 板日 × ${p.pallet} 元`],
+    ['加工費用',num(sumR)+' 元',`${num(sumSet)} 組 × ${p.proc} 元`],
+    ['今日庫存板數',num(carry(pal,today)),`今日倉租 ${num(carry(pal,today)*p.pallet)} 元`],
+  ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
+}
+['coFrom','coTo'].forEach(id=>document.getElementById(id).addEventListener('change',renderCost));
+['coPallet','coProc'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{const p=price();coSave.disabled=!canWrite||(+coPallet.value===p.pallet&&+coProc.value===p.proc);coMsg.textContent=''}));
+coSave.addEventListener('click',async()=>{
+  const v={pallet:Math.max(0,+coPallet.value||0),proc:Math.max(0,+coProc.value||0),at:Date.now()};
+  S.prices=v;coSave.disabled=true;
+  if(db){try{await db.doc('layout/prices').set(v);coMsg.className='msg ok';coMsg.textContent='單價已儲存'}catch(e){coMsg.className='msg err';coMsg.textContent='儲存失敗，請再試一次'}}
+  renderCost();
+});
+
+// 每次回報加工後，記下當天的累計完成組數（layout/proclog），費用統計以前後日差額算每日加工組數
+async function snapProc(){
+  const tot=PROC.reduce((a,r)=>a+Math.min(((S.proc[r[0]]||{}).w0)||0,r[3]),0);
+  const days=Object.assign({},(S.proclog||{}).days,{[dayKey()]:tot});
+  S.proclog={days};
+  if(db){try{await db.doc('layout/proclog').set({days,at:Date.now()})}catch(e){banner('加工紀錄寫入失敗（'+(e&&e.code||'unknown')+'）。')}}
+}
 pgBody.addEventListener('change',async e=>{
   const p=e.target.dataset.p;if(!p)return;
   const w=+e.target.dataset.w,v=Math.max(0,parseInt(e.target.value||'0',10)||0);
   const cur=Object.assign({w0:0,w1:0,w2:0},S.proc[p]);cur['w'+w]=v;cur.at=Date.now();
   await write('proc',p,cur);
+  await snapProc();
 });
 
 // ---------- 寫入 ----------
@@ -979,9 +1085,9 @@ async function add(col,data){
 }
 
 // ---------- 分頁 ----------
-const VIEWS=['inbound','schedule','floor','progress'];
+const VIEWS=['inbound','schedule','floor','progress','cost'];
 let view=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):'inbound';
-const R={inbound:renderInbound,schedule:renderSchedule,floor:renderFloor,progress:renderProgress};
+const R={inbound:renderInbound,schedule:renderSchedule,floor:renderFloor,progress:renderProgress,cost:renderCost};
 function show(v){view=v;VIEWS.forEach(x=>{document.getElementById('v-'+x).hidden=x!==v;document.getElementById('t-'+x).setAttribute('aria-selected',x===v)});try{history.replaceState(null,'','#'+v)}catch(e){}R[v]()}
 document.querySelector('nav').addEventListener('click',e=>{const b=e.target.closest('button');if(b)show(b.dataset.v)});
 listeners.add(()=>R[view]());
@@ -1018,6 +1124,9 @@ async function connectFirestore(){
   const sub=(col,fn)=>db.collection(col).onSnapshot(s=>{fn(s);emit()},e=>{setSync('off','連線中斷，請重新整理')});
   sub('inb',s=>{S.inb={};s.docs.forEach(d=>S.inb[d.id]=d.data());rebuildINB()});
   sub('proc',s=>{S.proc={};s.docs.forEach(d=>S.proc[d.id]=d.data())});
+  db.doc('layout/days').onSnapshot(d=>{S.days=d.exists?d.data():null;emit()},()=>{});
+  db.doc('layout/proclog').onSnapshot(d=>{S.proclog=d.exists?d.data():null;emit()},()=>{});
+  db.doc('layout/prices').onSnapshot(d=>{S.prices=d.exists?d.data():null;emit()},()=>{});
   db.doc('layout/DD').onSnapshot(d=>{if(d.exists&&!editMode){S.layout=d.data();emit()}},()=>{});
   sub('sched',s=>{S.sched={};s.docs.forEach(d=>S.sched[d.id]=d.data())});
   sub('slots',s=>{S.slots={};s.docs.forEach(d=>S.slots[d.id]=d.data())});
