@@ -233,6 +233,9 @@ button.b.icon{width:34px;padding:0;font-size:18px;line-height:1;font-weight:700;
 .cal table.twohead thead tr.mrow th{top:0;height:24px;padding:2px 6px;font-size:12px;font-weight:700;color:var(--accent);background:var(--panel)}
 .cal table.twohead thead tr.mrow th.mth{text-align:left;border-left:2px solid var(--accent)}
 .cal table.twohead thead tr:nth-child(2) th{top:24px}
+#btnIO[aria-pressed="true"],#btnEdit[aria-pressed="true"]{background:var(--warn);border-color:var(--warn);color:#fff;font-weight:700;animation:pulseEdit 1.6s ease-in-out infinite}
+@keyframes pulseEdit{50%{opacity:.75}}
+@media (prefers-reduced-motion:reduce){#btnIO[aria-pressed="true"],#btnEdit[aria-pressed="true"]{animation:none}}
 .thumb.has{border-style:solid;background:var(--panel)}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .imgview{min-height:160px;display:flex;align-items:center;justify-content:center;background:var(--sunk);border-radius:6px;overflow:hidden}
@@ -370,12 +373,12 @@ button.b.icon{width:34px;padding:0;font-size:18px;line-height:1;font-weight:700;
       <label class="datepick">庫存日期 <input type="date" id="flDate"></label><button type="button" class="b" id="flToday" hidden>回到今天</button>
       <input id="flQ" type="search" placeholder="找商品所在儲位…" list="itemList">
       <button type="button" class="b" id="btn3d" aria-pressed="false" hidden>斜二測立體</button>
-      <button type="button" class="b admin-only p" id="btnIO" aria-pressed="false">進出貨</button>
-      <button type="button" class="b admin-only" id="btnEdit" aria-pressed="false">編輯儲位配置</button>
+      <button type="button" class="b admin-only" id="btnIO" aria-pressed="false">編輯進出貨</button>
+      <button type="button" class="b admin-only" id="btnEdit" aria-pressed="false">編輯儲位</button>
       <span class="cnt" id="flTitle"></span>
     </div>
     <div class="editor" id="editor" hidden>
-      <p class="note">調整區域名稱（英數）、排數與每排板位；點圖上的格子可停用（柱位、走道），再點一次恢復。按「完成編輯」儲存。</p>
+      <p class="note">調整區域名稱（英數）、排數與每排板位；點圖上的格子可停用（柱位、走道），再點一次恢復。按「儲位編輯中（點此儲存）」儲存。</p>
       <div class="tbl" style="max-height:none"><table><thead><tr><th>區域</th><th>排數</th><th>每排板位</th><th></th></tr></thead><tbody id="edZones"></tbody></table></div>
       <div class="tools"><button type="button" class="b" id="edAdd">新增區域</button><button type="button" class="b" id="edReset">恢復預設</button></div>
       <label class="lab">碼頭（以「、」分隔）<input id="edDocks"></label>
@@ -383,7 +386,7 @@ button.b.icon{width:34px;padding:0;font-size:18px;line-height:1;font-weight:700;
       <div class="tools"><button type="button" class="b" id="edCancel">取消</button><span class="msg" id="edMsg"></span></div>
     </div>
     <div class="floor"><div class="plan" id="plan"></div></div>
-    <div class="legend"><span><i style="background:var(--panel);border:1px solid var(--line)"></i>空板位</span><span><i style="background:var(--accent-soft);border:1px solid var(--accent)"></i>未加工（進貨商品）</span><span><i style="background:var(--ok-soft);border:1px solid var(--ok)"></i>已加工（福袋成品）</span><span><i style="background:var(--ink);"></i>已選取</span><span>點格子查看存放商品；按「進出貨」後可複選格子入庫或出庫，同一板不可混放不同品項</span></div>
+    <div class="legend"><span><i style="background:var(--panel);border:1px solid var(--line)"></i>空板位</span><span><i style="background:var(--accent-soft);border:1px solid var(--accent)"></i>未加工（進貨商品）</span><span><i style="background:var(--ok-soft);border:1px solid var(--ok)"></i>已加工（福袋成品）</span><span><i style="background:var(--ink);"></i>已選取</span><span>點格子查看存放商品；按「編輯進出貨」後可複選格子入庫或出庫，同一板不可混放不同品項</span></div>
     <div class="selbar" id="selbar" hidden>
       <span id="selTxt"></span>
       <button type="button" class="b p" id="openIn">入庫</button>
@@ -942,8 +945,8 @@ function renderFloor0(){
   const maxQ=Math.max(1,...used.map(id=>S.slots[id].qty));
   flTitle.textContent=`${ids.length} 個板位${L.blocked.length?`・${L.blocked.length} 格停用`:''}`;
   btn3d.setAttribute('aria-pressed',mode3d);btn3d.textContent=mode3d?'平面顯示':'斜二測立體';
-  btnIO.setAttribute('aria-pressed',ioMode);btnIO.textContent=ioMode?'結束進出貨':'進出貨';btnIO.disabled=editMode||!canWrite||!!HIST;plan.classList.toggle('io',ioMode);
-  btnEdit.setAttribute('aria-pressed',editMode);btnEdit.textContent=editMode?'完成編輯':'編輯儲位配置';
+  btnIO.setAttribute('aria-pressed',ioMode);btnIO.textContent=ioMode?'進出貨編輯中（點此結束）':'編輯進出貨';btnIO.disabled=editMode||!canWrite||!!HIST;plan.classList.toggle('io',ioMode);
+  btnEdit.setAttribute('aria-pressed',editMode);btnEdit.textContent=editMode?'儲位編輯中（點此儲存）':'編輯儲位';
   editor.hidden=!editMode;
   flKpi.innerHTML=[
     ['使用板位',`${used.length} / ${ids.length}`,`<div class="bar"><i style="width:${used.length/Math.max(ids.length,1)*100}%;background:var(--accent)"></i></div>`],
