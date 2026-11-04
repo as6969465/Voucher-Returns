@@ -189,6 +189,7 @@ button.b.sm.p{background:var(--accent);color:#fff;border-color:var(--accent)}
 .subtabs button[aria-selected="true"]{background:var(--accent);color:#fff}
 #v-inbound th,#v-inbound td{text-align:center}
 #v-inbound td input.qty{text-align:center}
+#v-inbound td input.qty.bad{color:var(--bad)}
 #v-inbound .cal td.lbl{text-align:left}
 h2.one{flex-wrap:nowrap;min-width:0}
 h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -214,6 +215,24 @@ h2.one span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:
 .plan.io .slot:not(.off){cursor:copy}
 .datepick{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mute);white-space:nowrap}
 input.price{width:90px;text-align:right;font-family:var(--mono)}
+body.viewer .admin-only{display:none!important}
+.vislist{display:grid;gap:6px}
+.exp{font:inherit;font-size:11px;width:18px;height:18px;padding:0;margin-right:4px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--ink);cursor:pointer;vertical-align:1px}
+.cal td.d.arr{color:var(--ok);font-weight:700;font-size:12px}
+tr.bomrow td{background:var(--sunk)}
+.bombox{position:sticky;left:40px;max-width:min(760px,calc(100vw - 120px));padding:8px 4px;white-space:normal}
+.bomhd{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.bomlist{margin:0;padding:0;list-style:none;display:grid;gap:4px}
+.bomlist li{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.dlg.wide{width:min(640px,100%)}
+.bomsel{max-height:50vh;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 10px;display:grid;gap:2px}
+.bomcat{font-weight:700;font-size:12.5px;color:var(--accent);margin-top:6px}
+.cal th.d small.wd{display:block;font-size:9px;font-weight:400;opacity:.85}
+.cal th.d.we small.wd{color:var(--bad)}
+button.b.icon{width:34px;padding:0;font-size:18px;line-height:1;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.cal table.twohead thead tr.mrow th{top:0;height:24px;padding:2px 6px;font-size:12px;font-weight:700;color:var(--accent);background:var(--panel)}
+.cal table.twohead thead tr.mrow th.mth{text-align:left;border-left:2px solid var(--accent)}
+.cal table.twohead thead tr:nth-child(2) th{top:24px}
 .thumb.has{border-style:solid;background:var(--panel)}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .imgview{min-height:160px;display:flex;align-items:center;justify-content:center;background:var(--sunk);border-radius:6px;overflow:hidden}
@@ -222,7 +241,7 @@ input.price{width:90px;text-align:right;font-family:var(--mono)}
 #inCal td.n{min-width:48px;text-align:center}
 .navrow{display:flex;align-items:flex-end;gap:8px;border-bottom:2px solid var(--accent)}
 .navrow nav{flex:1;min-width:0;border-bottom:0}
-.navrow #themeBtn{flex:none;margin-bottom:6px}
+.navrow>button{flex:none;margin-bottom:6px;height:34px;box-sizing:border-box}
 </style>
 
 <div class="wrap">
@@ -237,6 +256,8 @@ input.price{width:90px;text-align:right;font-family:var(--mono)}
   <button role="tab" data-v="progress" id="t-progress">加工展開進度</button>
   <button role="tab" data-v="cost" id="t-cost">費用統計</button>
 </nav>
+<button type="button" class="b admin-only" id="adSet">檢視權限</button>
+<button type="button" class="b icon" id="adBtn" title="管理者登入" aria-label="管理者登入">+</button>
 <button type="button" class="b" id="themeBtn" aria-pressed="false">深色模式</button>
 </div>
 
@@ -245,7 +266,8 @@ input.price{width:90px;text-align:right;font-family:var(--mono)}
   <div class="kpis" id="inKpi"></div>
   <div class="subtabs" role="tablist">
     <button type="button" role="tab" id="st-cal" data-st="cal" aria-selected="true">進倉日程</button>
-    <button type="button" role="tab" id="st-log" data-st="log" aria-selected="false">進貨驗收登錄</button>
+    <button type="button" role="tab" id="st-log" data-st="log" aria-selected="false">商品進貨登錄</button>
+    <button type="button" role="tab" id="st-acc" data-st="acc" aria-selected="false">進貨驗收</button>
   </div>
   <div class="panel" id="sp-cal">
     <h2>進倉日程<span>依預計進倉日（可在驗收登錄頁修改）；大肚應進量依三倉加工比例估算</span></h2>
@@ -253,15 +275,15 @@ input.price{width:90px;text-align:right;font-family:var(--mono)}
     <div class="legend"><span><i style="background:var(--gold)"></i>預計進倉</span><span><i style="background:var(--ok)"></i>已到齊</span><span><i style="background:var(--accent)"></i>今日</span></div>
   </div>
   <div class="panel" id="sp-log" hidden>
-    <h2>進貨驗收登錄<span>預計進倉日、實收數量、實際到貨日皆可修改，會同步到加工排程</span></h2>
+    <h2 id="inH">商品進貨登錄</h2>
     <div class="tools">
-      <button type="button" class="b p" id="itAdd">＋ 新增品項</button>
+      <button type="button" class="b admin-only p" id="itAdd">＋ 新增品項</button>
       <input id="inQ" type="search" placeholder="搜尋款式或 IP…">
       <select id="inWin"><option value="">全部進倉時段</option></select>
       <select id="inSt"><option value="">全部狀態</option><option>未到</option><option>部分到貨</option><option>已到齊</option><option>逾期未到</option></select>
       <span class="cnt" id="inCnt"></span>
     </div>
-    <div class="tbl"><table><thead><tr><th class="n">序</th><th>圖片</th><th>款式</th><th>IP</th><th class="n">大肚應進量</th><th>外箱</th><th class="n">箱入</th><th class="n">箱數</th><th>預計進倉日</th><th class="n">實收</th><th>實際到貨日</th><th>狀態</th></tr></thead><tbody id="inBody"></tbody></table></div>
+    <div class="tbl"><table><thead id="inHead"></thead><tbody id="inBody"></tbody></table></div>
   </div>
 </section>
 
@@ -295,16 +317,48 @@ input.price{width:90px;text-align:right;font-family:var(--mono)}
 </div>
 <datalist id="catList"></datalist>
 
+<div class="modal" id="adModal" hidden>
+  <form class="dlg" id="adForm" role="dialog" aria-modal="true" aria-labelledby="adTitle">
+    <h2 id="adTitle">管理者登入</h2>
+    <p class="note" id="adNote">登入後才能修改內容；未登入時只能查看。</p>
+    <label class="lab">密碼<input id="adPw" type="password" autocomplete="current-password" required minlength="4"></label>
+    <label class="lab" id="adPw2L" hidden>再輸入一次<input id="adPw2" type="password" autocomplete="new-password"></label>
+    <div class="msg" id="adMsg"></div>
+    <div class="tools" style="justify-content:flex-end;margin:0"><button type="button" class="b" id="adCancel">取消</button><button class="b p" type="submit" id="adGo">登入</button></div>
+  </form>
+</div>
+<div class="modal" id="visModal" hidden>
+  <form class="dlg" id="visForm" role="dialog" aria-modal="true" aria-labelledby="visTitle">
+    <h2 id="visTitle">檢視權限</h2>
+    <p class="note">勾選未登入的人可以看到的分頁。管理者登入後一律可看全部分頁。</p>
+    <div class="vislist" id="visList"></div>
+    <button type="button" class="b" id="visPw">變更管理者密碼</button>
+    <div class="msg" id="visMsg"></div>
+    <div class="tools" style="justify-content:flex-end;margin:0"><button type="button" class="b" id="visCancel">取消</button><button class="b p" type="submit">儲存</button></div>
+  </form>
+</div>
+
+<div class="modal" id="bomModal" hidden>
+  <form class="dlg wide" id="bomForm" role="dialog" aria-modal="true" aria-labelledby="bomTitle">
+    <h2 id="bomTitle">設定內容物</h2>
+    <p class="note">勾選這個組合加工時需要的進貨品項。全部品項實收達應進量並填好到貨日，才算「完全到貨」。</p>
+    <div class="tools" style="margin:0"><input id="bomQ" type="search" placeholder="搜尋序號、款式或 IP…"><span class="cnt" id="bomCnt"></span></div>
+    <div class="bomsel" id="bomList"></div>
+    <div class="msg" id="bomMsg"></div>
+    <div class="tools" style="justify-content:flex-end;margin:0"><button type="button" class="b" id="bomCancel">取消</button><button class="b p" type="submit">儲存</button></div>
+  </form>
+</div>
+
 <!-- 加工排程 -->
 <section id="v-schedule" class="stack" hidden>
   <div class="kpis" id="scKpi"></div>
   <div class="panel">
     <div class="phead">
       <h2 class="one">加工排程<span>淺藍＝預計進貨、綠框＝實際到貨</span></h2>
-      <div class="pact"><span class="note" id="scHint"></span><button type="button" class="b p" id="scEdit">編輯</button><button type="button" class="b" id="scCancel" hidden>取消</button><button type="button" class="b p" id="scSave" hidden>儲存</button></div>
+      <div class="pact"><span class="note" id="scHint"></span><button type="button" class="b admin-only p" id="scEdit">編輯</button><button type="button" class="b" id="scCancel" hidden>取消</button><button type="button" class="b p" id="scSave" hidden>儲存</button></div>
     </div>
     <div class="cal" id="scCal"></div>
-    <div class="legend"><span><i style="background:var(--gold)"></i>預計進貨</span><span><i style="background:var(--panel);box-shadow:inset 0 0 0 3px var(--ok)"></i>實際到貨</span><span><i style="background:var(--accent)"></i>加工作業</span><span><i style="background:repeating-linear-gradient(45deg,var(--accent) 0 3px,var(--gold) 3px 6px)"></i>加工早於進貨完成</span></div>
+    <div class="legend"><span><i style="background:var(--gold)"></i>預計進貨</span><span><i style="background:var(--panel);box-shadow:inset 0 0 0 3px var(--ok)"></i>完全到貨（✓）</span><span><i style="background:var(--accent)"></i>加工作業</span><span><i style="background:repeating-linear-gradient(45deg,var(--accent) 0 3px,var(--gold) 3px 6px)"></i>加工早於進貨完成</span></div>
   </div>
 </section>
 
@@ -316,8 +370,8 @@ input.price{width:90px;text-align:right;font-family:var(--mono)}
       <label class="datepick">庫存日期 <input type="date" id="flDate"></label><button type="button" class="b" id="flToday" hidden>回到今天</button>
       <input id="flQ" type="search" placeholder="找商品所在儲位…" list="itemList">
       <button type="button" class="b" id="btn3d" aria-pressed="false" hidden>斜二測立體</button>
-      <button type="button" class="b p" id="btnIO" aria-pressed="false">進出貨</button>
-      <button type="button" class="b" id="btnEdit" aria-pressed="false">編輯儲位配置</button>
+      <button type="button" class="b admin-only p" id="btnIO" aria-pressed="false">進出貨</button>
+      <button type="button" class="b admin-only" id="btnEdit" aria-pressed="false">編輯儲位配置</button>
       <span class="cnt" id="flTitle"></span>
     </div>
     <div class="editor" id="editor" hidden>
@@ -382,7 +436,7 @@ input.price{width:90px;text-align:right;font-family:var(--mono)}
       <label class="datepick">迄<input type="date" id="coTo"></label>
       <label class="datepick">倉租（元/板/日）<input type="number" id="coPallet" min="0" step="0.1" inputmode="decimal" class="price"></label>
       <label class="datepick">加工（元/組）<input type="number" id="coProc" min="0" step="0.1" inputmode="decimal" class="price"></label>
-      <button type="button" class="b p" id="coSave" disabled>儲存單價</button>
+      <button type="button" class="b admin-only p" id="coSave" disabled>儲存單價</button>
       <span class="msg" id="coMsg"></span>
     </div>
     <div class="tbl"><table><thead><tr><th>日期</th><th class="n">庫存板數</th><th class="n">倉租</th><th class="n">加工組數</th><th class="n">加工費</th><th class="n">當日合計</th><th class="n">累計</th></tr></thead><tbody id="coBody"></tbody></table></div>
@@ -412,6 +466,7 @@ const TODAY=(()=>{const d=new Date();d.setHours(0,0,0,0);return d})();
 const D=(m,d)=>new Date(m>=10?Y:Y+1,m-1,d);
 const pd=s=>{const [m,d]=s.split('/').map(Number);return D(m,d)};
 const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
+const WD_TAG=d=>`<small class="wd">(${'日一二三四五六'[d.getDay()]})</small>`;
 const key=d=>`${d.getMonth()+1}-${d.getDate()}`;
 const num=n=>n==null||isNaN(n)?'—':Math.round(n).toLocaleString('zh-TW');
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -430,7 +485,41 @@ document.getElementById('cd').textContent=Math.max(0,Math.round((OPEN-TODAY)/864
 
 // ---------- 共用資料 ----------
 const S={inb:{},proc:{},slots:{},sched:{},moves:[],layout:null};
-let db=null,user=null,canWrite=true;
+let db=null,user=null,canWrite=false,dbWritable=true;
+// ---------- 管理者 ----------
+// 畫面層的密碼保護：密碼以 SHA-256 雜湊存在 layout/admin，登入狀態只存在本分頁（關閉分頁即登出）。
+// 資料庫規則仍允許寫入，這只防止一般使用者誤改，不能防止懂技術的人直接改資料庫。
+let isAdmin=false;try{isAdmin=sessionStorage.getItem('fb27-admin')==='1'}catch(e){}
+const TABS={inbound:'商品進貨排程',schedule:'加工排程',floor:'廠域儲位',progress:'加工展開進度',cost:'費用統計'};
+const DEF_VIS={inbound:true,schedule:true,floor:true,progress:true,cost:false};
+const adminCfg=()=>S.admin||{};
+const visible=v=>isAdmin||Object.assign({},DEF_VIS,adminCfg().visible||{})[v]!==false;
+async function sha(s){
+  const data=new TextEncoder().encode('fb27:'+s);
+  if(window.crypto&&crypto.subtle){const b=await crypto.subtle.digest('SHA-256',data);return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+  return sha256js(data);
+}
+// 非安全連線（無 crypto.subtle）時的 SHA-256 備援實作
+function sha256js(bytes){
+  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  let H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const l=bytes.length,n=((l+9+63)>>6)<<6,m=new Uint8Array(n);m.set(bytes);m[l]=0x80;
+  const dv=new DataView(m.buffer);dv.setUint32(n-4,l*8);
+  const r=(x,k)=>(x>>>k)|(x<<(32-k)),w=new Uint32Array(64);
+  for(let o=0;o<n;o+=64){
+    for(let i=0;i<16;i++)w[i]=dv.getUint32(o+i*4);
+    for(let i=16;i<64;i++){const s0=r(w[i-15],7)^r(w[i-15],18)^(w[i-15]>>>3),s1=r(w[i-2],17)^r(w[i-2],19)^(w[i-2]>>>10);w[i]=(w[i-16]+s0+w[i-7]+s1)|0}
+    let [a,b,c,d,e,f,g,h]=H;
+    for(let i=0;i<64;i++){const t1=(h+(r(e,6)^r(e,11)^r(e,25))+((e&f)^(~e&g))+K[i]+w[i])|0,t2=((r(a,2)^r(a,13)^r(a,22))+((a&b)^(a&c)^(b&c)))|0;h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0}
+    H=H.map((x,i)=>(x+[a,b,c,d,e,f,g,h][i])|0);
+  }
+  return H.map(x=>(x>>>0).toString(16).padStart(8,'0')).join('');
+}
+function applyAdmin(){
+  canWrite=isAdmin&&dbWritable;
+  document.body.classList.toggle('viewer',!isAdmin);
+  if(typeof adBtn!=='undefined'){adBtn.textContent=isAdmin?'−':'+';adBtn.title=isAdmin?'登出管理者':'管理者登入';adBtn.setAttribute('aria-label',adBtn.title);adBtn.classList.toggle('p',isAdmin)}
+}
 const listeners=new Set();const emit=()=>listeners.forEach(f=>f());
 const sync=document.getElementById('sync');
 function setSync(cls,txt){sync.className='sync '+cls;sync.lastElementChild.textContent=txt}
@@ -483,7 +572,7 @@ function renderInbound(){
   // 日程：依款式分組
   const ds=days(D(11,16),D(12,16));
   const cats=[...new Set(INB.map(r=>r[1]))];
-  let h=`<table><thead><tr><th>款式</th><th class="n">品項</th>${ds.map(d=>`<th class="d ${d.getDay()===0?'we':''} ${+d===+TODAY?'now':''}">${d.getDate()}</th>`).join('')}</tr></thead><tbody>`;
+  let h=`<table><thead><tr><th>款式</th><th class="n">品項</th>${ds.map(d=>`<th class="d ${d.getDay()===0?'we':''} ${+d===+TODAY?'now':''}">${d.getDate()}${WD_TAG(d)}</th>`).join('')}</tr></thead><tbody>`;
   h+=`<tr class="grp"><td>11 月 → 12 月</td><td></td>${ds.map(d=>`<td class="d">${d.getDate()===16||d.getDate()===1?(d.getMonth()+1)+'月':''}</td>`).join('')}</tr>`;
   cats.forEach(cat=>{
     const rs=INB.filter(r=>r[1]===cat);const done=rs.every(r=>inState(r)[0]==='已到齊');
@@ -492,17 +581,28 @@ function renderInbound(){
   document.getElementById('inCal').innerHTML=h+'</tbody></table>';
   renderInTable();
 }
+let inMode='log';
 function renderInTable(){
   const q=inQ.value.trim(),w=inWin.value,f=inSt.value;
   const rows=INB.filter(r=>(!q||(r[1]+r[2]).includes(q))&&(!w||winTxt(r)===w)&&(!f||inState(r)[0]===f));
   let h='',cat='';
+  const acc=inMode==='acc';
+  inH.innerHTML=acc?'進貨驗收<span>登錄實收數量與實際到貨日，到貨日會同步到加工排程</span>':'商品進貨登錄<span>新增或修改品項、上傳商品圖片、調整預計進倉日；箱規「確認中」需向廠商追問</span>';
+  itAdd.hidden=acc;
+  inHead.innerHTML=acc?'<tr><th class="n">序</th><th>圖片</th><th>款式</th><th>IP</th><th class="n">大肚應進量</th><th>預計進倉日</th><th class="n">實收</th><th class="n">不良品</th><th>實際到貨日</th><th>狀態</th></tr>'
+    :'<tr><th class="n">序</th><th>圖片</th><th>款式</th><th>IP</th><th class="n">大肚應進量</th><th>外箱</th><th class="n">箱入</th><th class="n">箱數</th><th>預計進倉日</th></tr>';
   rows.forEach(r=>{
-    if(r[1]!==cat){cat=r[1];h+=`<tr class="grp"><td colspan="12">${esc(cat)}</td></tr>`}
-    const s=inState(r),got=(S.inb[r[0]]||{}).qty;
-    const hasImg=(S.inb[r[0]]||{}).img;
-    h+=`<tr><td class="n">${r[0]}<br><button type="button" class="ibtn" data-itedit="${r[0]}" ${canWrite?'':'disabled'}>修改</button>${(S.inb[r[0]]||{}).custom?'<br><span class="pill s-ok">新增</span>':''}</td><td><button type="button" class="thumb ${hasImg?'has':''}" data-img="${r[0]}" aria-label="第${r[0]}項商品圖片">${hasImg?(IMG[r[0]]?`<img src="${IMG[r[0]]}" alt="">`:'…'):'＋'}</button></td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td class="n">${num(r[3])}</td><td>${r[4]?esc(r[4]):'<span class="pill s-warn">確認中</span>'}</td><td class="n">${num(r[5])}</td><td class="n">${num(r[6])}</td><td><span class="rng"><input class="dt" type="date" id="iws${r[0]}" data-ws="${r[0]}" value="${winOf(r)?isoD(winOf(r)[0]):''}" ${canWrite?'':'disabled'} aria-label="第${r[0]}項預計進倉起">–<input class="dt" type="date" id="iwe${r[0]}" data-we="${r[0]}" value="${winOf(r)?isoD(winOf(r)[1]):''}" ${canWrite?'':'disabled'} aria-label="第${r[0]}項預計進倉迄">${(S.inb[r[0]]||{}).ws?'<span class="pill s-warn">已改</span>':''}</span></td>
-    <td class="n"><input class="qty" id="inq${r[0]}" data-in="${r[0]}" type="number" min="0" value="${got??''}" placeholder="0" ${canWrite?'':'disabled'} aria-label="第${r[0]}項實收數量"></td><td><input class="dt" type="date" id="ina${r[0]}" data-arr="${r[0]}" value="${(S.inb[r[0]]||{}).arrived||''}" min="2026-11-01" max="2027-01-10" ${canWrite?'':'disabled'} aria-label="第${r[0]}項實際到貨日"></td><td><span class="pill ${s[1]}">${s[0]}</span></td></tr>`});
-  inBody.innerHTML=h||'<tr><td colspan="12">沒有符合的品項</td></tr>';
+    if(r[1]!==cat){cat=r[1];h+=`<tr class="grp"><td colspan="${acc?10:9}">${esc(cat)}</td></tr>`}
+    const o=S.inb[r[0]]||{},s=inState(r),got=o.qty,hasImg=o.img;
+    const thumb=`<button type="button" class="thumb ${hasImg?'has':''}" ${acc?(hasImg?`data-view="${r[0]}"`:'disabled'):`data-img="${r[0]}"`} aria-label="第${r[0]}項商品圖片">${hasImg?(IMG[r[0]]?`<img src="${IMG[r[0]]}" alt="">`:'…'):(acc?'—':'＋')}</button>`;
+    if(acc){
+      h+=`<tr><td class="n">${r[0]}</td><td>${imgBtn(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td class="n">${num(r[3])}</td><td>${winTxt(r)}</td>
+      <td class="n"><input class="qty" id="inq${r[0]}" data-in="${r[0]}" type="number" min="0" value="${got??''}" placeholder="0" ${canWrite?'':'disabled'} aria-label="第${r[0]}項實收數量"></td><td class="n"><input class="qty bad" id="inb${r[0]}" data-bad="${r[0]}" type="number" min="0" value="${o.bad??''}" placeholder="0" ${canWrite?'':'disabled'} aria-label="第${r[0]}項不良品數量"></td><td><input class="dt" type="date" id="ina${r[0]}" data-arr="${r[0]}" value="${o.arrived||''}" min="2026-11-01" max="2027-01-10" ${canWrite?'':'disabled'} aria-label="第${r[0]}項實際到貨日"></td><td><span class="pill ${s[1]}">${s[0]}</span></td></tr>`;
+    }else{
+      h+=`<tr><td class="n">${r[0]}<br><button type="button" class="ibtn admin-only" data-itedit="${r[0]}" ${canWrite?'':'disabled'}>修改</button>${o.custom?'<br><span class="pill s-ok">新增</span>':''}</td><td>${thumb}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td class="n">${num(r[3])}</td><td>${r[4]?esc(r[4]):'<span class="pill s-warn">確認中</span>'}</td><td class="n">${num(r[5])}</td><td class="n">${num(r[6])}</td><td><span class="rng"><input class="dt" type="date" id="iws${r[0]}" data-ws="${r[0]}" value="${winOf(r)?isoD(winOf(r)[0]):''}" ${canWrite?'':'disabled'} aria-label="第${r[0]}項預計進倉起">–<input class="dt" type="date" id="iwe${r[0]}" data-we="${r[0]}" value="${winOf(r)?isoD(winOf(r)[1]):''}" ${canWrite?'':'disabled'} aria-label="第${r[0]}項預計進倉迄">${o.ws?'<span class="pill s-warn">已改</span>':''}</span></td></tr>`;
+    }
+  });
+  inBody.innerHTML=h||'<tr><td colspan="9">沒有符合的品項</td></tr>';
   inCnt.textContent=`${rows.length} 項・${num(rows.reduce((a,r)=>a+r[3],0))} 件`;
   rows.forEach(r=>{if((S.inb[r[0]]||{}).img&&!(r[0] in IMG))loadImg(r[0])});
 }
@@ -620,14 +720,15 @@ async function viewImgs(ids){
 document.addEventListener('click',e=>{const b=e.target.closest('[data-view]');if(b){e.stopPropagation();viewImgs(b.dataset.view.split(',').map(Number))}},true);
 imgModal.addEventListener('click',e=>{if(e.target===imgModal)imgModal.hidden=true});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!imgModal.hidden)imgModal.hidden=true});
-document.querySelector('.subtabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;document.querySelectorAll('.subtabs button').forEach(x=>x.setAttribute('aria-selected',x===b));sp_cal.hidden=b.dataset.st!=='cal';sp_log.hidden=b.dataset.st!=='log'});
+document.querySelector('.subtabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;document.querySelectorAll('.subtabs button').forEach(x=>x.setAttribute('aria-selected',x===b));sp_cal.hidden=b.dataset.st!=='cal';sp_log.hidden=b.dataset.st==='cal';if(b.dataset.st!=='cal'){inMode=b.dataset.st;renderInTable()}});
 const sp_cal=document.getElementById('sp-cal'),sp_log=document.getElementById('sp-log');
 ['inQ','inWin','inSt'].forEach(id=>document.getElementById(id).addEventListener('input',renderInTable));
 inBody.addEventListener('change',async e=>{
-  const ds=e.target.dataset,id=ds.in||ds.arr||ds.ws||ds.we;if(!id)return;
+  const ds=e.target.dataset,id=ds.in||ds.bad||ds.arr||ds.ws||ds.we;if(!id)return;
   const r=INB.find(x=>String(x[0])===id),w=winOf(r);
   const cur=Object.assign({qty:0,arrived:''},S.inb[id],{at:Date.now()});
   if(ds.in)cur.qty=Math.max(0,parseInt(e.target.value||'0',10)||0);
+  else if(ds.bad)cur.bad=Math.max(0,parseInt(e.target.value||'0',10)||0);
   else if(ds.arr)cur.arrived=e.target.value||'';
   else{
     if(!e.target.value)return;
@@ -645,8 +746,15 @@ const inwTxt=i=>INMAP[i]?winTxt(INB[INMAP[i]-1]):'待確認';
 const inw=i=>(INMAP[i]&&winOf(INB[INMAP[i]-1]))||[D(11,26),D(11,30)];
 const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const fromIso=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
-const arrived=i=>{const n=INMAP[i],a=n&&S.inb[n];return a&&a.arrived?fromIso(a.arrived):null};
-const ready=i=>arrived(i)||inw(i)[1];
+// 組合內容物（綁定的進貨品項）：存在 layout/bom，未設定時預設只有主體商品
+const bom=i=>{const m=(S.bom||{}).map||{},v=m[PROC[i][0]];return(Array.isArray(v)?v:(INMAP[i]?[INMAP[i]]:[])).filter(id=>INB.some(r=>r[0]===id))};
+const itemArrived=id=>{const r=INB.find(x=>x[0]===id),o=S.inb[id]||{};return r&&o.arrived&&(o.qty||0)>=r[3]?fromIso(o.arrived):null};
+// 完全到貨：所有內容物實收都達應進量且有到貨日，取最晚的到貨日
+const fullArr=i=>{const ids=bom(i);if(!ids.length)return null;const ds=ids.map(itemArrived);return ds.every(Boolean)?new Date(Math.max(...ds)):null};
+const arrCount=i=>bom(i).filter(itemArrived).length;
+const arrived=fullArr;
+const bomWin=i=>{const ws=bom(i).map(id=>winOf(INB.find(r=>r[0]===id))).filter(Boolean);return ws.length?[new Date(Math.min(...ws.map(w=>w[0]))),new Date(Math.max(...ws.map(w=>w[1])))]:inw(i)};
+const ready=i=>fullArr(i)||bomWin(i)[1];
 const WD=days(D(12,1),D(12,24)).filter(d=>d.getDay()!==0);
 const CAP=[0].map(w=>Math.ceil(PROC.reduce((a,r)=>a+r[3+w],0)/WD.length*1.15/100)*100);
 const PLAN=PROC.map(()=>[{}]);
@@ -684,19 +792,20 @@ function renderSchedule(){
   const tot=PROC.reduce((a,r)=>a+r[3],0);
   const manual=PROC.filter(r=>(S.sched[r[0]]||{}).start).length;
   const early=PROC.filter((r,i)=>{const s=span(i);return s&&s[0]<=ready(i)}).length;
-  const got=PROC.filter((r,i)=>arrived(i)).length;
+  const got=PROC.filter((r,i)=>fullArr(i)).length;
   const planToday=PROC.reduce((a,r,i)=>a+planTo(i,0,TODAY),0);
   const load=CALD.map(d=>PROC.reduce((a,r,i)=>a+(PLAN[i][0][key(d)]||0),0));
   const over=load.filter(q=>q>CAP[0]).length;
   scKpi.innerHTML=[
     ['加工總組數',num(tot),`${PROC.length} 個組合・${WD.length} 個工作天`],
-    ['主體已到貨',`${got} / ${PROC.length}`,'依進貨頁「實際到貨日」'],
+    ['完全到貨',`${got} / ${PROC.length}`,'所有內容物都已到齊的組合'],
     ['今日應累計完成',num(planToday),TODAY<WD[0]?'12/1 開始加工':`${(planToday/tot*100).toFixed(0)}%`],
     ['手動調整時段',manual,'其餘依到貨日自動排'],
     ['加工早於到貨',early,early?'請確認主體已到貨':'無衝突'],
     ['超出產能天數',over,over?'請分散時段或加派人力':'產能足夠'],
   ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
-  let h=`<table><thead><tr><th class="sq">序</th><th class="lbl">組合</th><th>加工時段</th><th class="n">組數</th><th>預計進貨</th><th>實際到貨</th>${CALD.map(d=>`<th class="d ${d.getDay()===0?'we':''} ${+d===+TODAY?'now':''}">${d.getDate()===1||+d===+CALD[0]?`<small>${d.getMonth()+1}月</small>`:''}${d.getDate()}</th>`).join('')}</tr></thead><tbody>`;
+  const months=[];CALD.forEach(d=>{const m=d.getMonth()+1,l=months[months.length-1];l&&l.m===m?l.n++:months.push({m,n:1})});
+  let h=`<table class="twohead"><thead><tr class="mrow"><th class="sq"></th><th class="lbl"></th><th colspan="4"></th>${months.map(x=>`<th class="mth" colspan="${x.n}">${x.m} 月</th>`).join('')}</tr><tr><th class="sq">序</th><th class="lbl">組合</th><th>加工時段</th><th class="n">組數</th><th>預計進貨</th><th>完全到貨</th>${CALD.map(d=>`<th class="d ${d.getDay()===0?'we':''} ${+d===+TODAY?'now':''}">${d.getDate()}${WD_TAG(d)}</th>`).join('')}</tr></thead><tbody>`;
   let cat='';
   PROC.forEach((r,i)=>{
     if(r[1]!==cat){cat=r[1];h+=`<tr class="grp"><td class="sq"></td><td class="lbl">${esc(cat)}</td><td colspan="${CALD.length+4}"></td></tr>`}
@@ -705,19 +814,58 @@ function renderSchedule(){
     const ds=dr&&dr.start?fromIso(dr.start):null,de=dr&&dr.end?fromIso(dr.end):null;
     let txt=s?`${fmt(s[0])}–${fmt(s[1])}`:'—';
     if(dr&&dr.first)txt=fmt(fromIso(dr.first))+' → 點結束日';else if(dr&&dr.reset)txt='改回自動';else if(ds)txt=`${fmt(ds)}–${fmt(de)}`;
-    h+=`<tr class="${changed||dr&&dr.first?'picking':''}"><td class="sq n">${r[0]}</td><td class="lbl" title="${esc(r[2])}">${imgBtn(INMAP[i])}${esc(r[2].replace(/^[\d,]+元/,''))}</td><td><span class="rng"><span class="date">${txt}</span>${changed?'<span class="pill s-warn">未儲存</span>':man?'<span class="pill s-warn">手動</span>':''}${edit&&man&&!(dr&&dr.reset)?`<button type="button" class="b sm" data-reset="${r[0]}">改回自動</button>`:''}${conflict&&!edit?'<span class="pill s-bad">早於到貨</span>':''}</span></td>
+    h+=`<tr class="${changed||dr&&dr.first?'picking':''}"><td class="sq n">${r[0]}</td><td class="lbl" title="${esc(r[2])}"><button type="button" class="exp" data-exp="${r[0]}" aria-expanded="${OPEN_BOM.has(r[0])}" aria-label="展開內容物">${OPEN_BOM.has(r[0])?'▾':'▸'}</button>${imgBtn(INMAP[i])}${esc(r[2].replace(/^[\d,]+元/,''))}</td><td><span class="rng"><span class="date">${txt}</span>${changed?'<span class="pill s-warn">未儲存</span>':man?'<span class="pill s-warn">手動</span>':''}${edit&&man&&!(dr&&dr.reset)?`<button type="button" class="b sm" data-reset="${r[0]}">改回自動</button>`:''}${conflict&&!edit?'<span class="pill s-bad">早於到貨</span>':''}</span></td>
     <td class="n">${num(r[3])}</td>
-    <td>${inwTxt(i)}</td>
-    <td>${arr?`<span class="pill s-ok">${fmt(arr)}</span>`:INMAP[i]?'<span class="pill s-idle">未到</span>':'—'}</td>
+    <td>${(w=>`${fmt(w[0])}-${fmt(w[1])}`)(bomWin(i))}</td>
+    <td>${arr?`<span class="pill s-ok">${fmt(arr)}</span>`:bom(i).length?`<span class="pill s-idle">${arrCount(i)}/${bom(i).length} 到齊</span>`:'<span class="pill s-warn">未設定</span>'}</td>
     ${CALD.map(d=>{
-      const q=PLAN[i][0][key(d)]||0,inb=d>=inw(i)[0]&&d<=inw(i)[1],isArr=arr&&+d===+arr;
+      const q=PLAN[i][0][key(d)]||0,inb=d>=bomWin(i)[0]&&d<=bomWin(i)[1],isArr=arr&&+d===+arr;
       const useDraft=dr&&!dr.reset&&ds&&!dr.first,inDraft=useDraft&&d>=ds&&d<=de&&d.getDay()!==0;
       const base=useDraft||(dr&&dr.first)?(inDraft?'draft':inb?'on':''):(q?(d<=ready(i)?'proc bad':'proc'):inb?'on':'');
       const cls=['d',edit?'pk':'',base,isArr?'arr':'',dr&&dr.first===iso(d)?'pstart':''].join(' ');
-      return `<td class="${cls}" data-r="${r[0]}" data-d="${iso(d)}" title="${fmt(d)}${inb?'｜預計進貨':''}${isArr?'｜實際到貨':''}${q?'｜加工 '+num(q)+' 組':''}"></td>`}).join('')}</tr>`});
+      return `<td class="${cls}" data-r="${r[0]}" data-d="${iso(d)}" title="${fmt(d)}${inb?'｜預計進貨':''}${isArr?'｜完全到貨':''}${q?'｜加工 '+num(q)+' 組':''}">${isArr?'✓':''}</td>`}).join('')}</tr>`;
+    if(OPEN_BOM.has(r[0]))h+=bomRow(i);
+  });
   h+=`<tr class="grp"><td class="sq"></td><td class="lbl">每日加工量</td><td></td><td class="n">${num(tot)}</td><td colspan="2"></td>${load.map(q=>`<td class="d" style="font-size:9px;${q>CAP[0]?'color:var(--bad)':''}" title="${num(q)} 組">${q?Math.round(q/100)/10+'k':''}</td>`).join('')}</tr>`;
   scCal.innerHTML=h+'</tbody></table>';
 }
+
+// ---------- 組合內容物：展開查看與綁定設定 ----------
+const OPEN_BOM=new Set();
+function bomRow(i){
+  const r=PROC[i],ids=bom(i);
+  const items=ids.map(id=>{const x=INB.find(q=>q[0]===id),o=S.inb[id]||{},a=itemArrived(id);
+    const st=a?['已到齊','s-ok']:(o.qty||0)>0?['部分到貨','s-warn']:['未到','s-idle'];
+    return`<li>${imgBtn(id)}<b>#${id}</b> ${esc(x[1])}（${esc(x[2])}）<span class="note">應進 ${num(x[3])}・實收 ${num(o.qty||0)}${o.arrived?'・到貨 '+fmt(fromIso(o.arrived)):''}</span> <span class="pill ${st[1]}">${st[0]}</span></li>`}).join('');
+  return`<tr class="bomrow"><td class="sq"></td><td colspan="${CALD.length+5}"><div class="bombox"><div class="bomhd"><b>內容物 ${ids.length} 項</b>${(S.bom&&S.bom.map&&S.bom.map[r[0]])?'':'<span class="note">（預設：只有主體商品）</span>'}<button type="button" class="b sm admin-only" data-bomset="${r[0]}" ${canWrite?'':'disabled'}>設定內容物</button></div>${ids.length?`<ul class="bomlist">${items}</ul>`:'<p class="note">尚未綁定任何進貨品項。</p>'}</div></td></tr>`;
+}
+scCal.addEventListener('click',e=>{
+  const x=e.target.closest('[data-exp]');if(x){const id=+x.dataset.exp;OPEN_BOM.has(id)?OPEN_BOM.delete(id):OPEN_BOM.add(id);renderSchedule();return}
+  const s=e.target.closest('[data-bomset]');if(s)openBom(+s.dataset.bomset);
+},true);
+let bomId=null,bomSel=new Set();
+function openBom(id){
+  bomId=id;const i=PROC.findIndex(r=>r[0]===id);bomSel=new Set(bom(i));
+  bomTitle.textContent=`設定內容物：#${id} ${PROC[i][2]}`;bomQ.value='';bomMsg.textContent='';renderBomList();bomModal.hidden=false;bomQ.focus();
+}
+function renderBomList(){
+  const q=bomQ.value.trim();let h='',cat='';
+  INB.filter(r=>!q||(r[0]+r[1]+r[2]).includes(q)||bomSel.has(r[0])).forEach(r=>{
+    if(r[1]!==cat){cat=r[1];h+=`<div class="bomcat">${esc(cat)}</div>`}
+    h+=`<label class="lab chk"><input type="checkbox" id="bom-${r[0]}" data-bomi="${r[0]}" ${bomSel.has(r[0])?'checked':''}> #${r[0]} ${esc(r[2])} <span class="note">應進 ${num(r[3])}</span></label>`});
+  bomList.innerHTML=h||'<p class="note">找不到符合的品項</p>';bomCnt.textContent=`已選 ${bomSel.size} 項`;
+}
+bomQ.addEventListener('input',renderBomList);
+bomList.addEventListener('change',e=>{const id=+e.target.dataset.bomi;if(!id)return;e.target.checked?bomSel.add(id):bomSel.delete(id);bomCnt.textContent=`已選 ${bomSel.size} 項`});
+bomCancel.addEventListener('click',()=>{bomModal.hidden=true});
+bomModal.addEventListener('click',e=>{if(e.target===bomModal)bomModal.hidden=true});
+bomForm.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const map=Object.assign({},(S.bom||{}).map,{[bomId]:[...bomSel].sort((a,b)=>a-b)});S.bom={map};
+  if(db){try{await db.doc('layout/bom').set({map,at:Date.now()})}catch(x){bomMsg.className='msg err';bomMsg.textContent='儲存失敗，請再試一次。';return}}
+  bomModal.hidden=true;OPEN_BOM.add(bomId);emit();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!bomModal.hidden)bomModal.hidden=true});
 scEdit.addEventListener('click',()=>{if(!canWrite)return;edit={d:{}};banner('');renderSchedule()});
 scCancel.addEventListener('click',()=>{edit=null;banner('');renderSchedule()});
 scSave.addEventListener('click',async()=>{
@@ -1071,7 +1219,7 @@ async function write(col,id,data){
   S[col][id]=data;if(col==='inb')rebuildINB();emit();
   if(!db)return true;
   try{await db.collection(col).doc(String(id)).set(data);return true}
-  catch(e){if(e&&e.code==='invalid_argument'){canWrite=false;banner('你的權限只能檢視，無法登錄資料。');emit()}else banner('儲存失敗，請稍後再試（'+(e&&e.code||'unknown')+'）。');return false}
+  catch(e){if(e&&e.code==='invalid_argument'){dbWritable=false;canWrite=false;banner('你的權限只能檢視，無法登錄資料。');emit()}else banner('儲存失敗，請稍後再試（'+(e&&e.code||'unknown')+'）。');return false}
 }
 async function write1(col,id,data){
   S.layout=data;emit();
@@ -1084,14 +1232,65 @@ async function add(col,data){
   try{await db.collection(col).add(data)}catch(e){banner('異動紀錄寫入失敗（'+(e&&e.code||'unknown')+'）。')}
 }
 
+
+// 登入／登出、首次設定密碼、變更密碼
+let adMode='login';
+function openAd(mode){
+  adMode=mode;const first=mode==='setup'||mode==='change';
+  adTitle.textContent=mode==='setup'?'設定管理者密碼':mode==='change'?'變更管理者密碼':'管理者登入';
+  adNote.textContent=mode==='setup'?'尚未設定管理者密碼，請設定一組（至少 4 碼）。設定後登入才能修改內容。':mode==='change'?'輸入新的管理者密碼（至少 4 碼）。':'登入後才能修改內容；未登入時只能查看。';
+  adPw2L.hidden=!first;adPw.value=adPw2.value='';adMsg.textContent='';adGo.textContent=first?'儲存密碼':'登入';
+  adModal.hidden=false;adPw.focus();
+}
+adBtn.addEventListener('click',()=>{
+  if(isAdmin){isAdmin=false;try{sessionStorage.removeItem('fb27-admin')}catch(e){}if(typeof edit!=='undefined')edit=null;ioMode=false;editMode=false;emit();return}
+  openAd(adminCfg().hash?'login':'setup');
+});
+adCancel.addEventListener('click',()=>{adModal.hidden=true});
+adModal.addEventListener('click',e=>{if(e.target===adModal)adModal.hidden=true});
+adForm.addEventListener('submit',async e=>{
+  e.preventDefault();const err=s=>{adMsg.className='msg err';adMsg.textContent=s};
+  const pw=adPw.value;if(pw.length<4)return err('密碼至少 4 碼。');
+  const h=await sha(pw);
+  if(adMode==='login'){
+    if(h!==adminCfg().hash)return err('密碼不正確。');
+  }else{
+    if(pw!==adPw2.value)return err('兩次輸入的密碼不一致。');
+    const cfg=Object.assign({visible:DEF_VIS},adminCfg(),{hash:h,at:Date.now()});S.admin=cfg;
+    if(db){try{await db.doc('layout/admin').set(cfg)}catch(x){return err('密碼儲存失敗，請再試一次。')}}
+  }
+  isAdmin=true;try{sessionStorage.setItem('fb27-admin','1')}catch(x){}
+  adModal.hidden=true;emit();
+});
+adSet.addEventListener('click',()=>{
+  const v=Object.assign({},DEF_VIS,adminCfg().visible||{});
+  visList.innerHTML=VIEWS.map(k=>`<label class="lab chk"><input type="checkbox" id="vis-${k}" data-vis="${k}" ${v[k]?'checked':''}> ${TABS[k]}</label>`).join('');
+  visMsg.textContent='';visModal.hidden=false;
+});
+visCancel.addEventListener('click',()=>{visModal.hidden=true});
+visModal.addEventListener('click',e=>{if(e.target===visModal)visModal.hidden=true});
+visPw.addEventListener('click',()=>{visModal.hidden=true;openAd('change')});
+visForm.addEventListener('submit',async e=>{
+  e.preventDefault();const vis={};visList.querySelectorAll('[data-vis]').forEach(c=>vis[c.dataset.vis]=c.checked);
+  const cfg=Object.assign({},adminCfg(),{visible:vis,at:Date.now()});S.admin=cfg;
+  if(db){try{await db.doc('layout/admin').set(cfg)}catch(x){visMsg.className='msg err';visMsg.textContent='儲存失敗，請再試一次。';return}}
+  visModal.hidden=true;emit();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){adModal.hidden=true;visModal.hidden=true}});
 // ---------- 分頁 ----------
 const VIEWS=['inbound','schedule','floor','progress','cost'];
 let view=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):'inbound';
 const R={inbound:renderInbound,schedule:renderSchedule,floor:renderFloor,progress:renderProgress,cost:renderCost};
-function show(v){view=v;VIEWS.forEach(x=>{document.getElementById('v-'+x).hidden=x!==v;document.getElementById('t-'+x).setAttribute('aria-selected',x===v)});try{history.replaceState(null,'','#'+v)}catch(e){}R[v]()}
+function applyVis(){
+  VIEWS.forEach(x=>{document.getElementById('t-'+x).hidden=!visible(x)});
+  if(!visible(view)){const v=VIEWS.find(visible);if(v){show(v);return true}
+    VIEWS.forEach(x=>document.getElementById('v-'+x).hidden=true);banner('目前沒有開放查看的分頁，請由管理者登入。');return true}
+  return false;
+}
+function show(v){if(!visible(v))v=VIEWS.find(visible)||v;view=v;VIEWS.forEach(x=>{document.getElementById('v-'+x).hidden=x!==v;document.getElementById('t-'+x).setAttribute('aria-selected',x===v)});try{history.replaceState(null,'','#'+v)}catch(e){}R[v]()}
 document.querySelector('nav').addEventListener('click',e=>{const b=e.target.closest('button');if(b)show(b.dataset.v)});
-listeners.add(()=>R[view]());
-show(view);
+listeners.add(()=>{applyAdmin();if(!applyVis())R[view]()});
+applyAdmin();applyVis();show(view);
 
 // ---------- 連線 ----------
 
@@ -1121,9 +1320,11 @@ async function connectFirestore(){
   // Firestore（voucher-returns 專案）：集合名稱加上 fb27_ 前綴，與其他資料分開
   try{db=await connectFirestore()}catch(e){setSync('off','離線');banner('無法連線共用資料庫，登錄內容不會保存，請檢查網路後重新整理。');return}
   setSync('on','已連線・即時同步');
+  db.doc('layout/admin').onSnapshot(d=>{S.admin=d.exists?d.data():null;emit()},()=>{});
   const sub=(col,fn)=>db.collection(col).onSnapshot(s=>{fn(s);emit()},e=>{setSync('off','連線中斷，請重新整理')});
   sub('inb',s=>{S.inb={};s.docs.forEach(d=>S.inb[d.id]=d.data());rebuildINB()});
   sub('proc',s=>{S.proc={};s.docs.forEach(d=>S.proc[d.id]=d.data())});
+  db.doc('layout/bom').onSnapshot(d=>{S.bom=d.exists?d.data():null;emit()},()=>{});
   db.doc('layout/days').onSnapshot(d=>{S.days=d.exists?d.data():null;emit()},()=>{});
   db.doc('layout/proclog').onSnapshot(d=>{S.proclog=d.exists?d.data():null;emit()},()=>{});
   db.doc('layout/prices').onSnapshot(d=>{S.prices=d.exists?d.data():null;emit()},()=>{});
