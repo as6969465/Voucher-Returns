@@ -257,7 +257,7 @@ button.b.icon{width:34px;padding:0;font-size:18px;line-height:1;font-weight:700;
   <button role="tab" data-v="schedule" id="t-schedule">加工排程</button>
   <button role="tab" data-v="floor" id="t-floor">廠域儲位</button>
   <button role="tab" data-v="progress" id="t-progress">加工展開進度</button>
-  <button role="tab" data-v="cost" id="t-cost">費用統計</button>
+  <button role="tab" data-v="cost" id="t-cost">庫存統計</button>
 </nav>
 <button type="button" class="b admin-only" id="adSet">檢視權限</button>
 <button type="button" class="b icon" id="adBtn" title="管理者登入" aria-label="管理者登入">+</button>
@@ -427,22 +427,18 @@ button.b.icon{width:34px;padding:0;font-size:18px;line-height:1;font-weight:700;
   </form>
 </div>
 
-<!-- 費用統計 -->
+<!-- 庫存統計 -->
 <section id="v-cost" class="stack" hidden>
   <div class="kpis" id="coKpi"></div>
   <div class="panel">
     <div class="phead">
-      <h2 class="one">費用統計<span>每日庫存板數 × 倉租單價＋每日加工組數 × 加工單價</span></h2>
+      <h2 class="one">庫存統計<span>每日庫存板數與加工完成組數</span></h2>
     </div>
     <div class="tools">
       <label class="datepick">起<input type="date" id="coFrom"></label>
       <label class="datepick">迄<input type="date" id="coTo"></label>
-      <label class="datepick">倉租（元/板/日）<input type="number" id="coPallet" min="0" step="0.1" inputmode="decimal" class="price"></label>
-      <label class="datepick">加工（元/組）<input type="number" id="coProc" min="0" step="0.1" inputmode="decimal" class="price"></label>
-      <button type="button" class="b admin-only p" id="coSave" disabled>儲存單價</button>
-      <span class="msg" id="coMsg"></span>
     </div>
-    <div class="tbl"><table><thead><tr><th>日期</th><th class="n">庫存板數</th><th class="n">倉租</th><th class="n">加工組數</th><th class="n">加工費</th><th class="n">當日合計</th><th class="n">累計</th></tr></thead><tbody id="coBody"></tbody></table></div>
+    <div class="tbl"><table><thead><tr><th>日期</th><th class="n">庫存板數</th><th class="n">當日加工組數</th><th class="n">累計加工組數</th></tr></thead><tbody id="coBody"></tbody></table></div>
     <p class="note">庫存板數＝當天使用中的儲位格數（一格一板），沒有進出貨的日子沿用前一次紀錄；加工組數＝當天累計完成數減前一天。紀錄從開始使用本功能後才有。</p>
   </div>
 </section>
@@ -493,7 +489,7 @@ let db=null,user=null,canWrite=false,dbWritable=true;
 // 畫面層的密碼保護：密碼以 SHA-256 雜湊存在 layout/admin，登入狀態只存在本分頁（關閉分頁即登出）。
 // 資料庫規則仍允許寫入，這只防止一般使用者誤改，不能防止懂技術的人直接改資料庫。
 let isAdmin=false;try{isAdmin=sessionStorage.getItem('fb27-admin')==='1'}catch(e){}
-const TABS={inbound:'商品進貨排程',schedule:'加工排程',floor:'廠域儲位',progress:'加工展開進度',cost:'費用統計'};
+const TABS={inbound:'商品進貨排程',schedule:'加工排程',floor:'廠域儲位',progress:'加工展開進度',cost:'庫存統計'};
 const DEF_VIS={inbound:true,schedule:true,floor:true,progress:true,cost:false};
 const adminCfg=()=>S.admin||{};
 const visible=v=>isAdmin||Object.assign({},DEF_VIS,adminCfg().visible||{})[v]!==false;
@@ -1163,46 +1159,33 @@ function renderProgress(){
   pgBody.innerHTML=h;pgCnt.textContent=`${n} 個組合`;
 }
 pgQ.addEventListener('input',renderProgress);
-// ---------- 費用統計 ----------
-const DEF_PRICE={pallet:15,proc:10.5}; // 預設取自「各倉損益」大肚倉：倉租 15 元/板/日、加工 10.5 元/袋
-const price=()=>Object.assign({},DEF_PRICE,S.prices||{});
+// ---------- 庫存統計 ----------
 function carry(map,d){const ks=Object.keys(map||{}).filter(x=>x<=d).sort();return ks.length?map[ks[ks.length-1]]:0}
 function renderCost(){
-  const p=price(),today=dayKey();
-  // 預設期間：最早一筆紀錄（或今天）到今天
+  const today=dayKey();
   const first=[...Object.keys(((S.days||{}).list)||{}),...Object.keys(((S.proclog||{}).days)||{})].sort()[0];
   if(!coFrom.value)coFrom.value=first&&first<today?first:today;
   if(!coTo.value)coTo.value=today;
-  if(document.activeElement!==coPallet)coPallet.value=p.pallet;
-  if(document.activeElement!==coProc)coProc.value=p.proc;
-  coSave.disabled=!canWrite||(+coPallet.value===p.pallet&&+coProc.value===p.proc);
   const pal=(S.days||{}).list||{},pro=(S.proclog||{}).days||{};
   const a=isoP(coFrom.value),b=isoP(coTo.value<coFrom.value?coFrom.value:coTo.value);
-  let cum=0,sumP=0,sumR=0,sumPal=0,sumSet=0;const rows=[];
+  let sumPal=0,sumSet=0,maxPal=0;const rows=[];
   days(a,b).forEach(d=>{
     const k=isoD(d),prev=new Date(d);prev.setDate(prev.getDate()-1);
-    const pallets=carry(pal,k),sets=Math.max(0,carry(pro,k)-carry(pro,isoD(prev)));
-    const rent=pallets*p.pallet,pc=sets*p.proc;cum+=rent+pc;sumP+=rent;sumR+=pc;sumPal+=pallets;sumSet+=sets;
-    rows.push(`<tr${k===today?' class="grp"':''}><td>${fmt(d)}（${'日一二三四五六'[d.getDay()]}）</td><td class="n">${num(pallets)}</td><td class="n">${num(rent)}</td><td class="n">${num(sets)}</td><td class="n">${num(pc)}</td><td class="n"><b>${num(rent+pc)}</b></td><td class="n">${num(cum)}</td></tr>`);
+    const pallets=carry(pal,k),tot=carry(pro,k),sets=Math.max(0,tot-carry(pro,isoD(prev)));
+    sumPal+=pallets;sumSet+=sets;maxPal=Math.max(maxPal,pallets);
+    rows.push(`<tr${k===today?' class="grp"':''}><td>${fmt(d)}（${'日一二三四五六'[d.getDay()]}）</td><td class="n">${num(pallets)}</td><td class="n">${num(sets)}</td><td class="n">${num(tot)}</td></tr>`);
   });
-  coBody.innerHTML=rows.join('')+`<tr class="grp"><td>合計</td><td class="n">${num(sumPal)} 板日</td><td class="n">${num(sumP)}</td><td class="n">${num(sumSet)}</td><td class="n">${num(sumR)}</td><td class="n">${num(sumP+sumR)}</td><td></td></tr>`;
+  coBody.innerHTML=rows.join('')+`<tr class="grp"><td>合計</td><td class="n">${num(sumPal)} 板日</td><td class="n">${num(sumSet)}</td><td></td></tr>`;
   coKpi.innerHTML=[
-    ['期間總費用',num(sumP+sumR)+' 元',`${fmt(a)}–${fmt(b)}・${rows.length} 天`],
-    ['倉租費用',num(sumP)+' 元',`${num(sumPal)} 板日 × ${p.pallet} 元`],
-    ['加工費用',num(sumR)+' 元',`${num(sumSet)} 組 × ${p.proc} 元`],
-    ['今日庫存板數',num(carry(pal,today)),`今日倉租 ${num(carry(pal,today)*p.pallet)} 元`],
+    ['今日庫存板數',num(carry(pal,today)),'使用中儲位格數'],
+    ['期間最高板數',num(maxPal),`${fmt(a)}–${fmt(b)}・${rows.length} 天`],
+    ['期間加工組數',num(sumSet),'當日完成數加總'],
+    ['累計加工組數',num(carry(pro,today)),'至今日'],
   ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
 }
 ['coFrom','coTo'].forEach(id=>document.getElementById(id).addEventListener('change',renderCost));
-['coPallet','coProc'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{const p=price();coSave.disabled=!canWrite||(+coPallet.value===p.pallet&&+coProc.value===p.proc);coMsg.textContent=''}));
-coSave.addEventListener('click',async()=>{
-  const v={pallet:Math.max(0,+coPallet.value||0),proc:Math.max(0,+coProc.value||0),at:Date.now()};
-  S.prices=v;coSave.disabled=true;
-  if(db){try{await db.doc('layout/prices').set(v);coMsg.className='msg ok';coMsg.textContent='單價已儲存'}catch(e){coMsg.className='msg err';coMsg.textContent='儲存失敗，請再試一次'}}
-  renderCost();
-});
 
-// 每次回報加工後，記下當天的累計完成組數（layout/proclog），費用統計以前後日差額算每日加工組數
+// 每次回報加工後，記下當天的累計完成組數（layout/proclog），庫存統計以前後日差額算每日加工組數
 async function snapProc(){
   const tot=PROC.reduce((a,r)=>a+Math.min(((S.proc[r[0]]||{}).w0)||0,r[3]),0);
   const days=Object.assign({},(S.proclog||{}).days,{[dayKey()]:tot});
@@ -1330,7 +1313,6 @@ async function connectFirestore(){
   db.doc('layout/bom').onSnapshot(d=>{S.bom=d.exists?d.data():null;emit()},()=>{});
   db.doc('layout/days').onSnapshot(d=>{S.days=d.exists?d.data():null;emit()},()=>{});
   db.doc('layout/proclog').onSnapshot(d=>{S.proclog=d.exists?d.data():null;emit()},()=>{});
-  db.doc('layout/prices').onSnapshot(d=>{S.prices=d.exists?d.data():null;emit()},()=>{});
   db.doc('layout/DD').onSnapshot(d=>{if(d.exists&&!editMode){S.layout=d.data();emit()}},()=>{});
   sub('sched',s=>{S.sched={};s.docs.forEach(d=>S.sched[d.id]=d.data())});
   sub('slots',s=>{S.slots={};s.docs.forEach(d=>S.slots[d.id]=d.data())});
