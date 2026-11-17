@@ -438,7 +438,14 @@ button.b.icon{width:34px;padding:0;font-size:18px;line-height:1;font-weight:700;
       <label class="datepick">起<input type="date" id="coFrom"></label>
       <label class="datepick">迄<input type="date" id="coTo"></label>
     </div>
-    <div class="tbl"><table><thead><tr><th>日期</th><th class="n">庫存板數</th><th class="n">當日加工組數</th><th class="n">累計加工組數</th></tr></thead><tbody id="coBody"></tbody></table></div>
+    <div class="tools admin-only">
+      <label class="datepick">手動新增：日期<input type="date" id="maDate"></label>
+      <label class="datepick">板數<input type="number" id="maPal" min="0" step="1" inputmode="numeric" class="price"></label>
+      <label class="datepick">加工組數<input type="number" id="maSet" min="0" step="1" inputmode="numeric" class="price"></label>
+      <button type="button" class="b p" id="maAdd">新增</button>
+      <span class="msg" id="maMsg"></span>
+    </div>
+    <div class="tbl"><table><thead><tr><th>日期</th><th class="n">庫存板數</th><th class="n">當日加工組數</th><th class="n">累計加工組數</th><th class="n">手動新增</th></tr></thead><tbody id="coBody"></tbody></table></div>
     <p class="note">庫存板數＝當天使用中的儲位格數（一格一板），沒有進出貨的日子沿用前一次紀錄；加工組數＝當天累計完成數減前一天。紀錄從開始使用本功能後才有。</p>
   </div>
 </section>
@@ -1163,27 +1170,44 @@ pgQ.addEventListener('input',renderProgress);
 function carry(map,d){const ks=Object.keys(map||{}).filter(x=>x<=d).sort();return ks.length?map[ks[ks.length-1]]:0}
 function renderCost(){
   const today=dayKey();
-  const first=[...Object.keys(((S.days||{}).list)||{}),...Object.keys(((S.proclog||{}).days)||{})].sort()[0];
+  const first=[...Object.keys(((S.days||{}).list)||{}),...Object.keys(((S.stockadd||{}).list)||{}),...Object.keys(((S.proclog||{}).days)||{})].sort()[0];
   if(!coFrom.value)coFrom.value=first&&first<today?first:today;
   if(!coTo.value)coTo.value=today;
-  const pal=(S.days||{}).list||{},pro=(S.proclog||{}).days||{};
+  const pal=(S.days||{}).list||{},pro=(S.proclog||{}).days||{},man=(S.stockadd||{}).list||{};
+  const manCum=k=>Object.keys(man).filter(x=>x<=k).reduce((s,x)=>s+(+man[x].sets||0),0);
   const a=isoP(coFrom.value),b=isoP(coTo.value<coFrom.value?coFrom.value:coTo.value);
   let sumPal=0,sumSet=0,maxPal=0;const rows=[];
   days(a,b).forEach(d=>{
     const k=isoD(d),prev=new Date(d);prev.setDate(prev.getDate()-1);
-    const pallets=carry(pal,k),tot=carry(pro,k),sets=Math.max(0,tot-carry(pro,isoD(prev)));
+    const m=man[k]||{},pallets=carry(pal,k)+(+m.pal||0),tot=carry(pro,k)+manCum(k),sets=Math.max(0,carry(pro,k)-carry(pro,isoD(prev)))+(+m.sets||0);
     sumPal+=pallets;sumSet+=sets;maxPal=Math.max(maxPal,pallets);
-    rows.push(`<tr${k===today?' class="grp"':''}><td>${fmt(d)}（${'日一二三四五六'[d.getDay()]}）</td><td class="n">${num(pallets)}</td><td class="n">${num(sets)}</td><td class="n">${num(tot)}</td></tr>`);
+    rows.push(`<tr${k===today?' class="grp"':''}><td>${fmt(d)}（${'日一二三四五六'[d.getDay()]}）</td><td class="n">${num(pallets)}</td><td class="n">${num(sets)}</td><td class="n">${num(tot)}</td><td class="n">${man[k]?`${m.pal?'板 +'+num(m.pal)+' ':''}${m.sets?'組 +'+num(m.sets):''}${canWrite?` <button type="button" class="b" data-madel="${k}" aria-label="刪除手動新增">✕</button>`:''}`:''}</td></tr>`);
   });
-  coBody.innerHTML=rows.join('')+`<tr class="grp"><td>合計</td><td class="n">${num(sumPal)} 板日</td><td class="n">${num(sumSet)}</td><td></td></tr>`;
+  coBody.innerHTML=rows.join('')+`<tr class="grp"><td>合計</td><td class="n">${num(sumPal)} 板日</td><td class="n">${num(sumSet)}</td><td></td><td></td></tr>`;
   coKpi.innerHTML=[
-    ['今日庫存板數',num(carry(pal,today)),'使用中儲位格數'],
+    ['今日庫存板數',num(carry(pal,today)+(+(man[today]||{}).pal||0)),'使用中儲位格數'],
     ['期間最高板數',num(maxPal),`${fmt(a)}–${fmt(b)}・${rows.length} 天`],
     ['期間加工組數',num(sumSet),'當日完成數加總'],
-    ['累計加工組數',num(carry(pro,today)),'至今日'],
+    ['累計加工組數',num(carry(pro,today)+manCum(today)),'至今日'],
   ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
 }
 ['coFrom','coTo'].forEach(id=>document.getElementById(id).addEventListener('change',renderCost));
+async function saveStockAdd(list){S.stockadd={list};renderCost();if(db){try{await db.doc('layout/stockadd').set({list,at:Date.now()});return true}catch(e){return false}}return true}
+maAdd.addEventListener('click',async()=>{
+  if(!canWrite)return;
+  const d=maDate.value||dayKey(),p=Math.max(0,Math.round(+maPal.value||0)),s=Math.max(0,Math.round(+maSet.value||0));
+  if(!p&&!s){maMsg.className='msg err';maMsg.textContent='請輸入板數或加工組數';return}
+  const list=Object.assign({},(S.stockadd||{}).list),o=list[d]||{};
+  list[d]={pal:(+o.pal||0)+p,sets:(+o.sets||0)+s};
+  if(coFrom.value&&d<coFrom.value)coFrom.value=d;if(coTo.value&&d>coTo.value)coTo.value=d;
+  const ok=await saveStockAdd(list);maPal.value=maSet.value='';
+  maMsg.className='msg '+(ok?'ok':'err');maMsg.textContent=ok?`已新增到 ${d}`:'儲存失敗，請再試一次';
+});
+coBody.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-madel]');if(!b||!canWrite)return;
+  if(!confirm(`刪除 ${b.dataset.madel} 的手動新增數量？`))return;
+  const list=Object.assign({},(S.stockadd||{}).list);delete list[b.dataset.madel];await saveStockAdd(list);
+});
 
 // 每次回報加工後，記下當天的累計完成組數（layout/proclog），庫存統計以前後日差額算每日加工組數
 async function snapProc(){
@@ -1312,6 +1336,7 @@ async function connectFirestore(){
   sub('proc',s=>{S.proc={};s.docs.forEach(d=>S.proc[d.id]=d.data())});
   db.doc('layout/bom').onSnapshot(d=>{S.bom=d.exists?d.data():null;emit()},()=>{});
   db.doc('layout/days').onSnapshot(d=>{S.days=d.exists?d.data():null;emit()},()=>{});
+  db.doc('layout/stockadd').onSnapshot(d=>{S.stockadd=d.exists?d.data():null;emit()},()=>{});
   db.doc('layout/proclog').onSnapshot(d=>{S.proclog=d.exists?d.data():null;emit()},()=>{});
   db.doc('layout/DD').onSnapshot(d=>{if(d.exists&&!editMode){S.layout=d.data();emit()}},()=>{});
   sub('sched',s=>{S.sched={};s.docs.forEach(d=>S.sched[d.id]=d.data())});
