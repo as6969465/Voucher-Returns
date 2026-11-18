@@ -437,6 +437,7 @@ button.b.icon{width:34px;padding:0;font-size:18px;line-height:1;font-weight:700;
     <div class="tools">
       <label class="datepick">起<input type="date" id="coFrom"></label>
       <label class="datepick">迄<input type="date" id="coTo"></label>
+      <button type="button" class="b" id="coExport">匯出 Excel（CSV）</button>
     </div>
     <div class="tools admin-only">
       <label class="datepick">手動新增：日期<input type="date" id="maDate"></label>
@@ -1194,6 +1195,13 @@ function renderCost(){
   ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
 }
 ['coFrom','coTo'].forEach(id=>document.getElementById(id).addEventListener('change',renderCost));
+coExport.addEventListener('click',()=>{
+  const tb=coBody.closest('table'),q=s=>{s=String(s).replace(/\s+/g,' ').replace(/✕/g,'').trim();return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+  const lines=[...tb.querySelectorAll('tr')].map(tr=>[...tr.children].map(c=>q(c.textContent)).join(','));
+  const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`大肚庫存統計_${coFrom.value}_${coTo.value}.csv`;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
+});
 async function saveStockAdd(list){S.stockadd={list};renderCost();if(db){try{await db.doc('layout/stockadd').set({list,at:Date.now()});return true}catch(e){return false}}return true}
 maAdd.addEventListener('click',async()=>{
   if(!canWrite)return;
