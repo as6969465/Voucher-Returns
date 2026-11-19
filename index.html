@@ -1298,8 +1298,11 @@ function carry(map,d){const ks=Object.keys(map||{}).filter(x=>x<=d).sort();retur
 function renderCost(){
   const today=dayKey();
   const first=[...Object.keys(((S.days||{}).list)||{}),...Object.keys(((S.stockadd||{}).list)||{}),...Object.keys(((S.proclog||{}).days)||{})].sort()[0];
-  if(!coFrom.value)coFrom.value=first&&first<today?first:today;
-  if(!coTo.value)coTo.value=today;
+  // 起始日期預設為最早有資料的那天；資料載入較晚時也會自動更新，除非使用者自己改過
+  const start=first&&first<today?first:today;
+  if(!coFrom.dataset.user||!coFrom.value)coFrom.value=start;
+  coFrom.min=coTo.min=start;if(coFrom.value<start)coFrom.value=start;
+  if(!coTo.dataset.user||!coTo.value)coTo.value=today;
   if(!stDate.value)stDate.value=today;stDate.max=today;
   const pal=(S.days||{}).list||{},pro=(S.proclog||{}).days||{},man=(S.stockadd||{}).list||{};
   const manCum=k=>Object.keys(man).filter(x=>x<=k).reduce((s,x)=>s+(+man[x].sets||0),0);
@@ -1319,7 +1322,7 @@ function renderCost(){
     ['累計加工組數',num(carry(pro,today)+manCum(today)),'至今日'],
   ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
 }
-['coFrom','coTo'].forEach(id=>document.getElementById(id).addEventListener('change',renderCost));
+['coFrom','coTo'].forEach(id=>document.getElementById(id).addEventListener('change',e=>{e.target.dataset.user='1';renderCost()}));
 coExport.addEventListener('click',()=>{
   const tb=coBody.closest('table'),q=s=>{s=String(s).replace(/\s+/g,' ').replace(/✕/g,'').trim();return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
   const lines=[...tb.querySelectorAll('tr')].map(tr=>[...tr.children].map(c=>q(c.textContent)).join(','));
