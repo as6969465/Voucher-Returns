@@ -86,7 +86,7 @@ button.b.sm{padding:1px 8px;font-size:12px}
 .floor-wrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px}
 @media (max-width:900px){.floor-wrap{grid-template-columns:1fr}}
 .floor{overflow-x:auto;background:var(--sunk);border-radius:6px;padding:12px}
-.xlmap{display:grid;grid-template-columns:repeat(53,minmax(17px,1fr));grid-auto-rows:20px;gap:1px;min-width:1000px}
+.xlmap{display:grid;grid-auto-rows:20px;gap:1px}
 .xlmap .xc{height:auto;padding:0;border-radius:2px;min-width:0}
 .plan.editing .xlmap .xl-l{cursor:pointer;text-decoration:underline dotted}
 .xlmap .xa[class]{border-style:solid;font-weight:700}
@@ -98,7 +98,7 @@ button.b.sm{padding:1px 8px;font-size:12px}
 .xlmap .xa.xv{writing-mode:vertical-rl;letter-spacing:.6em;font-size:13px}
 .plan.editing .xlmap .xm{cursor:move;touch-action:none;position:relative;z-index:5;outline:2px dashed currentColor;outline-offset:1px}
 .xlmap .xm .rz{position:absolute;right:-3px;bottom:-3px;width:12px;height:12px;background:currentColor;border:2px solid var(--panel);border-radius:2px;cursor:nwse-resize}
-.plan.editing .xlmap{background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:calc((100% + 1px)/53) 21px}
+.plan.editing .xlmap{background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:calc((100% + 1px)/var(--nc)) 21px}
 .xlmap .xl-l{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--accent);text-align:center;line-height:20px;white-space:nowrap}
 .xlmap .xa{border:1px dashed var(--mute);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--mute);font-size:12px;writing-mode:horizontal-tb;text-align:center;padding:2px}
 .plan{min-width:760px;display:flex;flex-direction:column;gap:10px}
@@ -409,7 +409,7 @@ button.b.icon{width:34px;padding:0;font-size:18px;line-height:1;font-weight:700;
       <label class="lab zonesonly">碼頭（以「、」分隔）<input id="edDocks"></label>
       <label class="lab zonesonly">作業區（以「、」分隔）<input id="edAreas"></label>
       <div class="xlonly">
-        <p class="note">標的物（廁所、鐵門等）：以地圖格位的「列、欄」設定範圍（列 1–66 由上而下，欄 1–53 由左而右；滑鼠移到儲格上可看到該格的列、欄）。</p>
+        <p class="note">標的物（廁所、鐵門等）：以地圖格位的「列、欄」設定範圍（列由上而下、欄由左而右，地圖邊界會依使用範圍自動縮放；滑鼠移到儲格上可看到該格的列、欄）。</p>
         <div class="tbl" style="max-height:none"><table><thead><tr><th>名稱</th><th>起列</th><th>起欄</th><th>迄列</th><th>迄欄</th><th>顏色</th><th>直排</th><th></th></tr></thead><tbody id="edMarks"></tbody></table></div>
         <div class="tools"><button type="button" class="b" id="edMarkAdd">新增標的物</button><button type="button" class="b" id="edMarkReset">標的物恢復預設</button></div>
       </div>
@@ -996,13 +996,19 @@ function renderFloor0(){
   ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
   let h;
   if(L.xl){
-    const r0=2,c0=1;h='<div class="xlmap">';
-    (L.marks||DEF_MARKS).forEach((m,mi)=>{const r1=Math.min(m.r1,m.r2),r2=Math.max(m.r1,m.r2),c1=Math.min(m.c1,m.c2),c2=Math.max(m.c1,m.c2),col=/^#[0-9a-f]{6}$/i.test(m.color)?m.color:'#64748b';h+=`<div class="xa xm${m.v?' xv':''}" data-mi="${mi}" style="grid-area:${r1}/${c1}/${r2+1}/${c2+1};background:${col}29;border-color:${col};color:${col}">${esc(m.n)}${editMode?'<i class="rz" title="拖曳調整大小"></i>':''}</div>`});
+    // 邊界依實際使用的儲格、代號與標的物自動內縮；編輯時四周多留 3 格空間可往外擴
+    const mk=L.marks||DEF_MARKS,rs=[],cs=[];
+    xlCells(L).forEach(([,r,c])=>{rs.push(r-1);cs.push(c)});xlLabels(L).forEach(([,r,c,sp])=>{rs.push(r-1);cs.push(c,c+sp-1)});
+    mk.forEach(m=>{rs.push(m.r1,m.r2);cs.push(m.c1,m.c2)});
+    const pad=editMode?3:0,R0=Math.max(1,Math.min(...rs)-pad),C0=Math.max(1,Math.min(...cs)-pad),R1=Math.max(...rs)+pad,C1=Math.max(...cs)+pad;
+    const r0=R0+1,c0=C0,nc=C1-C0+1;
+    h=`<div class="xlmap" data-r0="${R0}" data-c0="${C0}" data-nc="${nc}" style="grid-template-columns:repeat(${nc},minmax(17px,1fr));grid-template-rows:repeat(${R1-R0+1},20px);--nc:${nc};min-width:${nc*19}px">`;
+    (L.marks||DEF_MARKS).forEach((m,mi)=>{const r1=Math.min(m.r1,m.r2),r2=Math.max(m.r1,m.r2),c1=Math.min(m.c1,m.c2),c2=Math.max(m.c1,m.c2),col=/^#[0-9a-f]{6}$/i.test(m.color)?m.color:'#64748b';h+=`<div class="xa xm${m.v?' xv':''}" data-mi="${mi}" style="grid-area:${r1-R0+1}/${c1-C0+1}/${r2-R0+2}/${c2-C0+2};background:${col}29;border-color:${col};color:${col}">${esc(m.n)}${editMode?'<i class="rz" title="拖曳調整大小"></i>':''}</div>`});
     xlLabels(L).forEach(([n,r,c,sp])=>h+=`<div class="xl-l" data-code="${n}" style="grid-area:${r-r0+1}/${c-c0+1}/span 1/span ${sp}">${n}</div>`);
     xlCells(L).forEach(([cid,r,c])=>{
       const id='DD-'+cid,off=L.blocked.includes(id),s=S.slots[id],it=!off&&s&&s.qty>0?ITEMS[s.item]:null,hl=q&&it&&it.name.includes(q);
       const lv=mode3d&&it?Math.max(2,Math.round(s.qty/maxQ*10)):0,sh=lv?`box-shadow:${Array.from({length:lv},(_,k)=>`-${k+1}px ${((k+1)/OBQ).toFixed(1)}px 0 var(--${it.kind===2?'ok':'accent'})`).join(',')};transform:translate(${lv}px,-${(lv/OBQ).toFixed(1)}px);z-index:${r}`:'';
-      h+=`<button type="button" class="slot xc ${off?'off':''} ${it?'f'+it.kind:''} ${hl?'hl':''} ${sel.has(id)?'sel':''}" style="grid-area:${r-r0+1}/${c-c0+1};${sh}" data-s="${id}" aria-pressed="${sel.has(id)}" aria-label="${cid}" title="${cid}（列${r-r0+1} 欄${c-c0+1}）${off?'｜停用':it?'｜'+esc(it.name)+'｜'+s.qty+' 件':'｜空'}"></button>`;
+      h+=`<button type="button" class="slot xc ${off?'off':''} ${it?'f'+it.kind:''} ${hl?'hl':''} ${sel.has(id)?'sel':''}" style="grid-area:${r-r0+1}/${c-c0+1};${sh}" data-s="${id}" aria-pressed="${sel.has(id)}" aria-label="${cid}" title="${cid}（列${r-1} 欄${c}）${off?'｜停用':it?'｜'+esc(it.name)+'｜'+s.qty+' 件':'｜空'}"></button>`;
     });
     h+='</div>';
   }else{
@@ -1045,7 +1051,7 @@ function renderEditor(){
     if(!draft.marks)draft.marks=JSON.parse(JSON.stringify(DEF_MARKS));
     if(!editor.contains(document.activeElement)||!edMarks.contains(document.activeElement)){
       const ni=(i,k,v,max)=>`<input type="number" data-m="${i}" data-k="${k}" min="1" max="${max}" value="${v}" style="width:58px" aria-label="${k}">`;
-      edMarks.innerHTML=draft.marks.map((m,i)=>`<tr><td><input data-m="${i}" data-k="n" value="${esc(m.n)}" size="8" aria-label="名稱"></td><td>${ni(i,'r1',m.r1,66)}</td><td>${ni(i,'c1',m.c1,53)}</td><td>${ni(i,'r2',m.r2,66)}</td><td>${ni(i,'c2',m.c2,53)}</td><td><input type="color" data-m="${i}" data-k="color" value="${m.color}" aria-label="顏色"></td><td><input type="checkbox" data-m="${i}" data-k="v" ${m.v?'checked':''} aria-label="直排"></td><td><button type="button" class="b" data-mdel="${i}">刪除</button></td></tr>`).join('');
+      edMarks.innerHTML=draft.marks.map((m,i)=>`<tr><td><input data-m="${i}" data-k="n" value="${esc(m.n)}" size="8" aria-label="名稱"></td><td>${ni(i,'r1',m.r1,300)}</td><td>${ni(i,'c1',m.c1,200)}</td><td>${ni(i,'r2',m.r2,300)}</td><td>${ni(i,'c2',m.c2,200)}</td><td><input type="color" data-m="${i}" data-k="color" value="${m.color}" aria-label="顏色"></td><td><input type="checkbox" data-m="${i}" data-k="v" ${m.v?'checked':''} aria-label="直排"></td><td><button type="button" class="b" data-mdel="${i}">刪除</button></td></tr>`).join('');
     }
   }
   edZones.innerHTML=draft.zones.map((z,i)=>`<tr><td><input id="ez-n${i}" data-i="${i}" data-f="n" value="${esc(z.n)}" maxlength="3" size="3" aria-label="區域名稱"></td><td><input id="ez-r${i}" data-i="${i}" data-f="r" type="number" min="1" max="6" value="${z.r}" aria-label="排數"></td><td><input id="ez-b${i}" data-i="${i}" data-f="b" type="number" min="1" max="30" value="${z.b}" aria-label="每排板位"></td><td><button type="button" class="b sm" data-del="${i}">刪除</button></td></tr>`).join('');
@@ -1055,7 +1061,7 @@ function renderEditor(){
 editor.addEventListener('input',e=>{
   const t=e.target;if(!draft)return;
   if(t.dataset.m!=null){const m=draft.marks[+t.dataset.m],k=t.dataset.k;
-    m[k]=k==='n'||k==='color'?t.value:k==='v'?t.checked:Math.max(1,Math.min(k[0]==='r'?66:53,parseInt(t.value||'1',10)||1));
+    m[k]=k==='n'||k==='color'?t.value:k==='v'?t.checked:Math.max(1,Math.min(k[0]==='r'?300:200,parseInt(t.value||'1',10)||1));
     previewDraft();return}
   if(t.dataset.f){const z=draft.zones[+t.dataset.i];z[t.dataset.f]=t.dataset.f==='n'?t.value.toUpperCase().replace(/[^A-Z0-9]/g,''):Math.max(1,Math.min(t.dataset.f==='r'?6:30,parseInt(t.value||'1',10)||1))}
   if(t===edDocks)draft.docks=t.value.split(/[、,，]/).map(s=>s.trim()).filter(Boolean);
@@ -1087,12 +1093,12 @@ plan.addEventListener('pointerdown',e=>{
   const el=e.target.closest('.xm');if(!el||!editMode||!draft||!draft.xl)return;
   e.preventDefault();if(!draft.marks)draft.marks=JSON.parse(JSON.stringify(DEF_MARKS));
   const i=+el.dataset.mi,m=draft.marks[i],o=JSON.parse(JSON.stringify(m)),rz=e.target.classList.contains('rz');
-  const map=plan.querySelector('.xlmap'),cw=(map.getBoundingClientRect().width+1)/53,rh=21,x0=e.clientX,y0=e.clientY;
+  const map=plan.querySelector('.xlmap'),cw=(map.getBoundingClientRect().width+1)/+map.dataset.nc,rh=21,x0=e.clientX,y0=e.clientY;
   const n=(a,b)=>[Math.min(a,b),Math.max(a,b)];[o.r1,o.r2]=n(o.r1,o.r2);[o.c1,o.c2]=n(o.c1,o.c2);
   const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));let last='';
   const mv=ev=>{const dr=Math.round((ev.clientY-y0)/rh),dc=Math.round((ev.clientX-x0)/cw);
-    if(rz){m.r1=o.r1;m.c1=o.c1;m.r2=clamp(o.r2+dr,o.r1,66);m.c2=clamp(o.c2+dc,o.c1,53)}
-    else{const h=o.r2-o.r1,w=o.c2-o.c1;m.r1=clamp(o.r1+dr,1,66-h);m.c1=clamp(o.c1+dc,1,53-w);m.r2=m.r1+h;m.c2=m.c1+w}
+    if(rz){m.r1=o.r1;m.c1=o.c1;m.r2=clamp(o.r2+dr,o.r1,300);m.c2=clamp(o.c2+dc,o.c1,200)}
+    else{const h=o.r2-o.r1,w=o.c2-o.c1;m.r1=clamp(o.r1+dr,1,300-h);m.c1=clamp(o.c1+dc,1,200-w);m.r2=m.r1+h;m.c2=m.c1+w}
     const k=[m.r1,m.c1,m.r2,m.c2].join();if(k!==last){last=k;el.style.gridArea=`${m.r1}/${m.c1}/${m.r2+1}/${m.c2+1}`}};
   const up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);edMarks.innerHTML='';previewDraft();renderEditor()};
   addEventListener('pointermove',mv);addEventListener('pointerup',up);
@@ -1104,8 +1110,8 @@ btn3d.addEventListener('click',()=>{return;mode3d=!mode3d;if(mode3d){ioMode=fals
 const edTool=()=>(editor.querySelector('input[name=edTool]:checked')||{}).value||'off';
 function gridPos(e){
   const m=plan.querySelector('.xlmap');if(!m)return null;const b=m.getBoundingClientRect(),cs=getComputedStyle(m);
-  const cols=cs.gridTemplateColumns.split(' ').length,cw=(b.width+1)/cols,rh=21;
-  return {r:Math.floor((e.clientY-b.top)/rh)+1,c:Math.floor((e.clientX-b.left)/cw)+1};
+  const cols=+m.dataset.nc,cw=(b.width+1)/cols,rh=21;
+  return {r:Math.floor((e.clientY-b.top)/rh)+ +m.dataset.r0,c:Math.floor((e.clientX-b.left)/cw)+ +m.dataset.c0};
 }
 function ensureCells(){if(!draft.cells)draft.cells=JSON.parse(JSON.stringify(XL.cells));if(!draft.labels)draft.labels=JSON.parse(JSON.stringify(XL.labels))}
 plan.addEventListener('click',e=>{
@@ -1120,7 +1126,7 @@ plan.addEventListener('click',e=>{
     if(tool==='add'){
       if(e.target.closest('.slot,.xl-l'))return;
       const code=edCode.value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(!code){edMsg.className='msg err';edMsg.textContent='請先輸入代號（如 J1）';edCode.focus();return}
-      const p=gridPos(e);if(!p||p.r<1||p.c<1||p.c>53||p.r>66)return;
+      const p=gridPos(e);if(!p||p.r<1||p.c<1||p.c>200||p.r>300)return;
       ensureCells();const er=p.r+1;
       if(draft.cells.some(c=>c[1]===er&&c[2]===p.c)||draft.labels.some(l=>l[1]===er&&p.c>=l[2]&&p.c<l[2]+l[3]))return;
       const ns=draft.cells.filter(c=>c[0].startsWith(code+'-')).map(c=>+c[0].split('-').pop());const n=(ns.length?Math.max(...ns):0)+1;
