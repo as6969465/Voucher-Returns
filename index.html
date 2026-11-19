@@ -86,6 +86,7 @@ button.b.sm{padding:1px 8px;font-size:12px}
 .floor-wrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px}
 @media (max-width:900px){.floor-wrap{grid-template-columns:1fr}}
 .floor{overflow-x:auto;background:var(--sunk);border-radius:6px;padding:12px}
+.masep{width:1px;align-self:stretch;background:var(--line);margin:0 4px}
 .xlmap{display:grid;grid-auto-rows:20px;gap:1px}
 .xlmap .xc{height:auto;padding:0;border-radius:2px;min-width:0}
 .plan.editing .xlmap .xl-l{cursor:pointer;text-decoration:underline dotted}
@@ -468,16 +469,19 @@ button.b.icon{width:34px;padding:0;font-size:18px;line-height:1;font-weight:700;
       <label class="datepick">起<input type="date" id="coFrom"></label>
       <label class="datepick">迄<input type="date" id="coTo"></label>
       <button type="button" class="b" id="coExport">匯出 Excel（CSV）</button>
-    </div>
-    <div class="tools admin-only">
-      <label class="datepick">手動新增：日期<input type="date" id="maDate"></label>
-      <label class="datepick">板數<input type="number" id="maPal" min="0" step="1" inputmode="numeric" class="price"></label>
-      <label class="datepick">加工組數<input type="number" id="maSet" min="0" step="1" inputmode="numeric" class="price"></label>
-      <button type="button" class="b p" id="maAdd">新增</button>
-      <span class="msg" id="maMsg"></span>
+      <span class="admin-only masep" aria-hidden="true"></span>
+      <label class="datepick admin-only">結算日期<input type="date" id="stDate"></label>
+      <button type="button" class="b p admin-only" id="stGo">結算</button>
+      <span class="msg admin-only" id="stMsg"></span>
+      <span class="admin-only masep" aria-hidden="true"></span>
+      <label class="datepick admin-only">手動新增：日期<input type="date" id="maDate"></label>
+      <label class="datepick admin-only">板數<input type="number" id="maPal" min="0" step="1" inputmode="numeric" class="price"></label>
+      <label class="datepick admin-only">加工組數<input type="number" id="maSet" min="0" step="1" inputmode="numeric" class="price"></label>
+      <button type="button" class="b p admin-only" id="maAdd">新增</button>
+      <span class="msg admin-only" id="maMsg"></span>
     </div>
     <div class="tbl"><table><thead><tr><th>日期</th><th class="n">庫存板數</th><th class="n">當日加工組數</th><th class="n">累計加工組數</th><th class="n">手動新增</th></tr></thead><tbody id="coBody"></tbody></table></div>
-    <p class="note">庫存板數＝當天使用中的儲位格數（一格一板），沒有進出貨的日子沿用前一次紀錄；加工組數＝當天累計完成數減前一天。紀錄從開始使用本功能後才有。</p>
+    <p class="note">庫存板數＝按「結算」當下使用中的儲位格數（一格一板），未結算的日子沿用前一次結算；加工組數＝當天累計完成數減前一天。紀錄從開始使用本功能後才有。</p>
   </div>
 </section>
 
@@ -970,14 +974,14 @@ async function loadHist(d){
 }
 flDate.addEventListener('change',()=>loadHist(flDate.value));
 flToday.addEventListener('click',()=>{flDate.value=dayKey();loadHist(null)});
-async function snapDay(){
-  const day=dayKey(),sl={};
+async function snapDay(d){
+  const day=d||dayKey(),sl={};
   Object.entries(S.slots).forEach(([id,s])=>{if(s.qty>0)sl[id]={item:s.item,qty:s.qty}});
   const pallets=Object.keys(sl).length;
   const days=Object.assign({},(S.days||{}).list,{[day]:pallets});
   S.days={list:days};S.dayDocs=Object.assign({},S.dayDocs,{[day]:sl});
-  if(!db)return;
-  try{await db.doc('layout/day-'+day).set({slots:sl,pallets,at:Date.now()});await db.doc('layout/days').set({list:days,at:Date.now()})}catch(e){banner('當日庫存紀錄寫入失敗（'+(e&&e.code||'unknown')+'）。')}
+  if(!db)return pallets;
+  try{await db.doc('layout/day-'+day).set({slots:sl,pallets,at:Date.now()});await db.doc('layout/days').set({list:days,at:Date.now()});return pallets}catch(e){banner('當日庫存紀錄寫入失敗（'+(e&&e.code||'unknown')+'）。');return -1}
 }
 function renderFloor0(){
   const L=layout(),ids=slotIds(),q=flQ.value.trim();
@@ -1252,7 +1256,6 @@ mvForm.addEventListener('submit',async e=>{
     await add('moves',{ts:Date.now(),slot:p.id,dir:mvDir,item:p.item,qty:p.qty,note:mvNote.value.trim().slice(0,80),by:uid||''});
   }
   mvGo.disabled=false;
-  if(done)await snapDay();
   if(done===plans.length){closeModal();sel.clear();renderFloor()}
   else err(`只完成 ${done} / ${plans.length} 格，其餘未儲存，請再試一次。`);
 });
@@ -1297,6 +1300,7 @@ function renderCost(){
   const first=[...Object.keys(((S.days||{}).list)||{}),...Object.keys(((S.stockadd||{}).list)||{}),...Object.keys(((S.proclog||{}).days)||{})].sort()[0];
   if(!coFrom.value)coFrom.value=first&&first<today?first:today;
   if(!coTo.value)coTo.value=today;
+  if(!stDate.value)stDate.value=today;stDate.max=today;
   const pal=(S.days||{}).list||{},pro=(S.proclog||{}).days||{},man=(S.stockadd||{}).list||{};
   const manCum=k=>Object.keys(man).filter(x=>x<=k).reduce((s,x)=>s+(+man[x].sets||0),0);
   const a=isoP(coFrom.value),b=isoP(coTo.value<coFrom.value?coFrom.value:coTo.value);
@@ -1322,6 +1326,14 @@ coExport.addEventListener('click',()=>{
   const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`大肚庫存統計_${coFrom.value}_${coTo.value}.csv`;
   document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
+});
+stGo.addEventListener('click',async()=>{
+  if(!canWrite)return;const d=stDate.value||dayKey();
+  if(d>dayKey()){stMsg.className='msg err';stMsg.textContent='不能結算未來日期';return}
+  const had=((S.days||{}).list||{})[d];
+  if(had!=null&&!confirm(`${d} 已結算過（${had} 板），要以目前儲位庫存重新結算嗎？`))return;
+  stGo.disabled=true;const p=await snapDay(d);stGo.disabled=false;
+  stMsg.className='msg '+(p>=0?'ok':'err');stMsg.textContent=p>=0?`${d} 已結算：${p} 板`:'結算失敗，請再試一次';renderCost();
 });
 async function saveStockAdd(list){S.stockadd={list};renderCost();if(db){try{await db.doc('layout/stockadd').set({list,at:Date.now()});return true}catch(e){return false}}return true}
 maAdd.addEventListener('click',async()=>{
