@@ -96,6 +96,9 @@ button.b.sm{padding:1px 8px;font-size:12px}
 .xlmap .xa.xa3{background:rgba(2,132,199,.16);border-color:#0284c7;color:#0284c7}
 .xlmap .xa.xm{border-style:solid;font-weight:700;overflow:hidden}
 .xlmap .xa.xv{writing-mode:vertical-rl;letter-spacing:.6em;font-size:13px}
+.plan.editing .xlmap .xm{cursor:move;touch-action:none;position:relative;z-index:5;outline:2px dashed currentColor;outline-offset:1px}
+.xlmap .xm .rz{position:absolute;right:-3px;bottom:-3px;width:12px;height:12px;background:currentColor;border:2px solid var(--panel);border-radius:2px;cursor:nwse-resize}
+.plan.editing .xlmap{background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:calc((100% + 1px)/53) 21px}
 .xlmap .xl-l{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--accent);text-align:center;line-height:20px;white-space:nowrap}
 .xlmap .xa{border:1px dashed var(--mute);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--mute);font-size:12px;writing-mode:horizontal-tb;text-align:center;padding:2px}
 .plan{min-width:760px;display:flex;flex-direction:column;gap:10px}
@@ -153,6 +156,7 @@ input.dt{padding:2px 4px;font-family:var(--mono);font-size:12px}
 .slot b{font-family:var(--mono);font-size:10px}
 .plan{transition:transform .4s ease}
 .plan.three{transform:matrix(1,0,0.354,0.354,0,0);transform-origin:0 0;margin-top:60px;margin-right:240px}
+.plan.three .xlmap .xc:not(.f1):not(.f2){opacity:.55}
 .plan.three .slot{transition:transform .3s,box-shadow .3s}
 @media (prefers-reduced-motion:reduce){.plan,.plan.three .slot{transition:none}}
 .tools button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -384,14 +388,22 @@ button.b.icon{width:34px;padding:0;font-size:18px;line-height:1;font-weight:700;
     <div class="tools">
       <label class="datepick">庫存日期 <input type="date" id="flDate"></label><button type="button" class="b" id="flToday" hidden>回到今天</button>
       <input id="flQ" type="search" placeholder="找商品所在儲位…" list="itemList">
-      <button type="button" class="b" id="btn3d" aria-pressed="false" hidden>斜二測立體</button>
+      <button type="button" class="b" id="btn3d" aria-pressed="false" hidden>3D 檢視</button>
       <button type="button" class="b admin-only" id="btnIO" aria-pressed="false">編輯進出貨</button>
       <button type="button" class="b admin-only" id="btnEdit" aria-pressed="false">編輯儲位</button>
       <span class="cnt" id="flTitle"></span>
     </div>
     <div class="editor" id="editor" hidden>
       <p class="note">點格子可禁用／恢復單格；點代號（如 J1）可一次禁用／恢復該代號全部儲格。禁用的格子顯示斜線，不能入庫。有庫存的格子不能禁用。按「編輯中（點此儲存）」儲存。</p>
-      <div class="tools"><button type="button" class="b" id="edClear">全部恢復</button></div>
+      <div class="tools xlonly" role="radiogroup" aria-label="儲格編輯工具">
+        <label class="datepick"><input type="radio" name="edTool" value="off" checked> 禁用／恢復</label>
+        <label class="datepick"><input type="radio" name="edTool" value="add"> 新增儲格</label>
+        <label class="datepick">代號<input id="edCode" size="5" placeholder="如 J1" style="width:70px"></label>
+        <label class="datepick"><input type="radio" name="edTool" value="del"> 刪除儲格</label>
+        <button type="button" class="b" id="edClear">全部恢復</button>
+        <button type="button" class="b" id="edCellReset">儲格恢復檔案預設</button>
+      </div>
+      <p class="note xlonly">新增儲格：選「新增儲格」並輸入代號，點地圖上空白處即新增一格（新代號會自動在下方加上代號標籤）。刪除儲格：點儲格即刪除（有庫存不可刪）。標的物：直接拖曳移動，拖右下角小方塊調整大小。</p>
       <div class="tbl zonesonly" style="max-height:none"><table><thead><tr><th>區域</th><th>排數</th><th>每排板位</th><th></th></tr></thead><tbody id="edZones"></tbody></table></div>
       <div class="tools zonesonly"><button type="button" class="b" id="edAdd">新增區域</button><button type="button" class="b" id="edReset">恢復預設</button></div>
       <label class="lab zonesonly">碼頭（以「、」分隔）<input id="edDocks"></label>
@@ -933,7 +945,8 @@ itemList.innerHTML=Object.values(ITEMS).map(v=>`<option value="${esc(v.name)}"><
 const sel=new Set();let mvDir='in',mode3d=false,editMode=false,noEd=false,draft=null;
 const slotId=(z,row,b)=>`DD-${z}${row}-${String(b).padStart(2,'0')}`;
 const short=id=>id.slice(3);
-const slotIds=()=>{const L=layout(),r=[];if(L.xl)return XL.cells.map(c=>'DD-'+c[0]).filter(id=>!L.blocked.includes(id));L.zones.forEach(z=>{for(let row=1;row<=z.r;row++)for(let b=1;b<=z.b;b++)r.push(slotId(z.n,row,b))});return r.filter(id=>!L.blocked.includes(id))};
+const xlCells=L=>L.cells||XL.cells,xlLabels=L=>L.labels||XL.labels;
+const slotIds=()=>{const L=layout(),r=[];if(L.xl)return xlCells(L).map(c=>'DD-'+c[0]).filter(id=>!L.blocked.includes(id));L.zones.forEach(z=>{for(let row=1;row<=z.r;row++)for(let b=1;b<=z.b;b++)r.push(slotId(z.n,row,b))});return r.filter(id=>!L.blocked.includes(id))};
 // 斜二測：平面沿 45° 方向壓縮為一半；高度方向維持真實長度（以陰影層疊出板位堆高）
 const OBQ=0.354;
 // 歷史庫存：每次進出貨後把當天全部儲位存成一份「日快照」（layout/day-YYYY-MM-DD），
@@ -972,8 +985,8 @@ function renderFloor0(){
   const qty=used.reduce((a,id)=>a+S.slots[id].qty,0);
   const maxQ=Math.max(1,...used.map(id=>S.slots[id].qty));
   flTitle.textContent=`${ids.length} 個板位${L.blocked.length?`・${L.blocked.length} 格停用`:''}`;
-  btn3d.setAttribute('aria-pressed',mode3d);btn3d.textContent=mode3d?'平面顯示':'斜二測立體';
-  btnIO.setAttribute('aria-pressed',ioMode);btnIO.textContent=ioMode?'進出貨編輯中（點此結束）':'編輯進出貨';btnIO.disabled=editMode||!canWrite||!!HIST;plan.classList.toggle('io',ioMode);
+  btn3d.setAttribute('aria-pressed',mode3d);btn3d.textContent=mode3d?'回到平面':'3D 檢視';btn3d.disabled=editMode;
+  btnIO.setAttribute('aria-pressed',ioMode);btnIO.textContent=ioMode?'進出貨編輯中（點此結束）':'編輯進出貨';btnIO.disabled=editMode||mode3d||!canWrite||!!HIST;plan.classList.toggle('io',ioMode);
   btnEdit.setAttribute('aria-pressed',editMode);btnEdit.textContent=editMode?'編輯中（點此儲存）':'編輯儲位';
   editor.hidden=!editMode;
   flKpi.innerHTML=[
@@ -984,11 +997,12 @@ function renderFloor0(){
   let h;
   if(L.xl){
     const r0=2,c0=1;h='<div class="xlmap">';
-    (L.marks||DEF_MARKS).forEach(m=>{const r1=Math.min(m.r1,m.r2),r2=Math.max(m.r1,m.r2),c1=Math.min(m.c1,m.c2),c2=Math.max(m.c1,m.c2),col=/^#[0-9a-f]{6}$/i.test(m.color)?m.color:'#64748b';h+=`<div class="xa xm${m.v?' xv':''}" style="grid-area:${r1}/${c1}/${r2+1}/${c2+1};background:${col}29;border-color:${col};color:${col}">${esc(m.n)}</div>`});
-    XL.labels.forEach(([n,r,c,sp])=>h+=`<div class="xl-l" data-code="${n}" style="grid-area:${r-r0+1}/${c-c0+1}/span 1/span ${sp}">${n}</div>`);
-    XL.cells.forEach(([cid,r,c])=>{
+    (L.marks||DEF_MARKS).forEach((m,mi)=>{const r1=Math.min(m.r1,m.r2),r2=Math.max(m.r1,m.r2),c1=Math.min(m.c1,m.c2),c2=Math.max(m.c1,m.c2),col=/^#[0-9a-f]{6}$/i.test(m.color)?m.color:'#64748b';h+=`<div class="xa xm${m.v?' xv':''}" data-mi="${mi}" style="grid-area:${r1}/${c1}/${r2+1}/${c2+1};background:${col}29;border-color:${col};color:${col}">${esc(m.n)}${editMode?'<i class="rz" title="拖曳調整大小"></i>':''}</div>`});
+    xlLabels(L).forEach(([n,r,c,sp])=>h+=`<div class="xl-l" data-code="${n}" style="grid-area:${r-r0+1}/${c-c0+1}/span 1/span ${sp}">${n}</div>`);
+    xlCells(L).forEach(([cid,r,c])=>{
       const id='DD-'+cid,off=L.blocked.includes(id),s=S.slots[id],it=!off&&s&&s.qty>0?ITEMS[s.item]:null,hl=q&&it&&it.name.includes(q);
-      h+=`<button type="button" class="slot xc ${off?'off':''} ${it?'f'+it.kind:''} ${hl?'hl':''} ${sel.has(id)?'sel':''}" style="grid-area:${r-r0+1}/${c-c0+1}" data-s="${id}" aria-pressed="${sel.has(id)}" aria-label="${cid}" title="${cid}（列${r-r0+1} 欄${c-c0+1}）${off?'｜停用':it?'｜'+esc(it.name)+'｜'+s.qty+' 件':'｜空'}"></button>`;
+      const lv=mode3d&&it?Math.max(2,Math.round(s.qty/maxQ*10)):0,sh=lv?`box-shadow:${Array.from({length:lv},(_,k)=>`-${k+1}px ${((k+1)/OBQ).toFixed(1)}px 0 var(--${it.kind===2?'ok':'accent'})`).join(',')};transform:translate(${lv}px,-${(lv/OBQ).toFixed(1)}px);z-index:${r}`:'';
+      h+=`<button type="button" class="slot xc ${off?'off':''} ${it?'f'+it.kind:''} ${hl?'hl':''} ${sel.has(id)?'sel':''}" style="grid-area:${r-r0+1}/${c-c0+1};${sh}" data-s="${id}" aria-pressed="${sel.has(id)}" aria-label="${cid}" title="${cid}（列${r-r0+1} 欄${c-c0+1}）${off?'｜停用':it?'｜'+esc(it.name)+'｜'+s.qty+' 件':'｜空'}"></button>`;
     });
     h+='</div>';
   }else{
@@ -1069,13 +1083,54 @@ btnEdit.addEventListener('click',async()=>{
   if(!editMode){if(!canWrite)return;editMode=true;ioMode=false;draft=null;sel.clear();edMsg.textContent='';renderFloor();return}
   if(await saveLayout()){editMode=false;draft=null;renderFloor()}
 });
+plan.addEventListener('pointerdown',e=>{
+  const el=e.target.closest('.xm');if(!el||!editMode||!draft||!draft.xl)return;
+  e.preventDefault();if(!draft.marks)draft.marks=JSON.parse(JSON.stringify(DEF_MARKS));
+  const i=+el.dataset.mi,m=draft.marks[i],o=JSON.parse(JSON.stringify(m)),rz=e.target.classList.contains('rz');
+  const map=plan.querySelector('.xlmap'),cw=(map.getBoundingClientRect().width+1)/53,rh=21,x0=e.clientX,y0=e.clientY;
+  const n=(a,b)=>[Math.min(a,b),Math.max(a,b)];[o.r1,o.r2]=n(o.r1,o.r2);[o.c1,o.c2]=n(o.c1,o.c2);
+  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));let last='';
+  const mv=ev=>{const dr=Math.round((ev.clientY-y0)/rh),dc=Math.round((ev.clientX-x0)/cw);
+    if(rz){m.r1=o.r1;m.c1=o.c1;m.r2=clamp(o.r2+dr,o.r1,66);m.c2=clamp(o.c2+dc,o.c1,53)}
+    else{const h=o.r2-o.r1,w=o.c2-o.c1;m.r1=clamp(o.r1+dr,1,66-h);m.c1=clamp(o.c1+dc,1,53-w);m.r2=m.r1+h;m.c2=m.c1+w}
+    const k=[m.r1,m.c1,m.r2,m.c2].join();if(k!==last){last=k;el.style.gridArea=`${m.r1}/${m.c1}/${m.r2+1}/${m.c2+1}`}};
+  const up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);edMarks.innerHTML='';previewDraft();renderEditor()};
+  addEventListener('pointermove',mv);addEventListener('pointerup',up);
+});
+edCellReset.addEventListener('click',()=>{if(!draft)return;const all=new Set(XL.cells.map(c=>'DD-'+c[0]));const lost=Object.entries(S.slots).filter(([id,s])=>s.qty>0&&!all.has(id));if(lost.length){edMsg.className='msg err';edMsg.textContent='有庫存的自訂儲格請先出庫';return}delete draft.cells;delete draft.labels;previewDraft()});
 edClear.addEventListener('click',()=>{if(draft){draft.blocked=[];previewDraft()}});
 edCancel.addEventListener('click',()=>{editMode=false;draft=null;renderFloor()});
-btn3d.addEventListener('click',()=>{mode3d=!mode3d;try{localStorage.setItem('fb27-3d',mode3d?'1':'0')}catch(e){}renderFloor()});
+btn3d.addEventListener('click',()=>{return;mode3d=!mode3d;if(mode3d){ioMode=false;sel.clear()}try{localStorage.setItem('fb27-3d',mode3d?'1':'0')}catch(e){}renderFloor()});
+const edTool=()=>(editor.querySelector('input[name=edTool]:checked')||{}).value||'off';
+function gridPos(e){
+  const m=plan.querySelector('.xlmap');if(!m)return null;const b=m.getBoundingClientRect(),cs=getComputedStyle(m);
+  const cols=cs.gridTemplateColumns.split(' ').length,cw=(b.width+1)/cols,rh=21;
+  return {r:Math.floor((e.clientY-b.top)/rh)+1,c:Math.floor((e.clientX-b.left)/cw)+1};
+}
+function ensureCells(){if(!draft.cells)draft.cells=JSON.parse(JSON.stringify(XL.cells));if(!draft.labels)draft.labels=JSON.parse(JSON.stringify(XL.labels))}
 plan.addEventListener('click',e=>{
+  if(mode3d)return;
+  if(editMode&&draft&&draft.xl&&!e.target.closest('.xm')){
+    const tool=edTool();
+    if(tool==='del'){const b=e.target.closest('.slot');if(!b)return;const id=b.dataset.s;
+      if(S.slots[id]&&S.slots[id].qty>0){edMsg.className='msg err';edMsg.textContent=`${short(id)} 有庫存，不能刪除。`;return}
+      ensureCells();const cid=id.slice(3),code=cid.replace(/-\d+$/,'');draft.cells=draft.cells.filter(c=>c[0]!==cid);draft.blocked=draft.blocked.filter(x=>x!==id);
+      if(!draft.cells.some(c=>c[0].startsWith(code+'-')))draft.labels=draft.labels.filter(l=>l[0]!==code);
+      edMsg.className='msg ok';edMsg.textContent=`已刪除 ${cid}`;previewDraft();return}
+    if(tool==='add'){
+      if(e.target.closest('.slot,.xl-l'))return;
+      const code=edCode.value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(!code){edMsg.className='msg err';edMsg.textContent='請先輸入代號（如 J1）';edCode.focus();return}
+      const p=gridPos(e);if(!p||p.r<1||p.c<1||p.c>53||p.r>66)return;
+      ensureCells();const er=p.r+1;
+      if(draft.cells.some(c=>c[1]===er&&c[2]===p.c)||draft.labels.some(l=>l[1]===er&&p.c>=l[2]&&p.c<l[2]+l[3]))return;
+      const ns=draft.cells.filter(c=>c[0].startsWith(code+'-')).map(c=>+c[0].split('-').pop());const n=(ns.length?Math.max(...ns):0)+1;
+      draft.cells.push([code+'-'+n,er,p.c]);
+      if(!draft.labels.some(l=>l[0]===code))draft.labels.push([code,er+1,p.c,1]);
+      edMsg.className='msg ok';edMsg.textContent=`已新增 ${code}-${n}`;previewDraft();return}
+  }
   const lb=e.target.closest('[data-code]');
   if(lb&&editMode){
-    const ids=XL.cells.filter(c=>c[0].startsWith(lb.dataset.code+'-')).map(c=>'DD-'+c[0]);
+    const ids=xlCells(draft).filter(c=>c[0].startsWith(lb.dataset.code+'-')).map(c=>'DD-'+c[0]);
     const busy=ids.filter(id=>S.slots[id]&&S.slots[id].qty>0);
     const allOff=ids.every(id=>draft.blocked.includes(id));
     if(allOff)draft.blocked=draft.blocked.filter(id=>!ids.includes(id));
@@ -1083,6 +1138,7 @@ plan.addEventListener('click',e=>{
     edMsg.className='msg '+(busy.length&&!allOff?'err':'ok');edMsg.textContent=busy.length&&!allOff?`${busy.map(short).join('、')} 有庫存，未禁用`:'';
     previewDraft();return}
   const b=e.target.closest('.slot');if(!b)return;const id=b.dataset.s;
+  if(editMode&&e.target.closest('.xm'))return;
   if(editMode){
     if(S.slots[id]&&S.slots[id].qty>0){edMsg.className='msg err';edMsg.textContent=`${short(id)} 有庫存，不能停用。`;return}
     const i=draft.blocked.indexOf(id);i>=0?draft.blocked.splice(i,1):draft.blocked.push(id);previewDraft();return}
